@@ -4,10 +4,11 @@ use std::env::args;
 use std::process::exit;
 
 use crate::release::{GIT_DIRTY, GIT_SHA1, RUSTC_VERSION};
-use compat::getpid;
-use config::Config;
-use logger::{Level, Logger};
-use networking::Server;
+
+use jigawatt_compat::getpid;
+use jigawatt_config::Config;
+use jigawatt_logger::{Level, Logger};
+use jigawatt_networking::Server;
 
 fn main() {
     let mut config = Config::new(Logger::new(Level::Notice));

@@ -2,15 +2,19 @@ use std::io;
 use std::io::Write;
 use std::str;
 
-use crate::{dbutil::normalize_position, error::OperationError};
-
 use basichll::HLL;
-use rdbutil::constants::{TYPE_STRING, VERSION};
-use rdbutil::{encode_i64, encode_slice_u8, EncodeError};
+use serde::{Deserialize, Serialize};
+
+use jigawatt_rdbutil::{
+    constants::{TYPE_STRING, VERSION},
+    encode_i64, encode_slice_u8, EncodeError,
+};
+
+use crate::{dbutil::normalize_position, error::OperationError};
 
 const HLL_ERROR: f64 = 0.0019;
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum ValueString {
     Integer(i64),
     Data(Vec<u8>),

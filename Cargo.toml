@@ -22,6 +22,7 @@ members = [
     "logger",
     "compat",
     "storage",
+    "rdbutil",
 ]
 
 [[bin]]
@@ -30,7 +31,7 @@ path = "src/main.rs"
 doc = false
 
 [dependencies]
-config = { path = "config" }
-networking = { path = "networking" }
-logger = { path = "logger" }
-compat = { path = "compat" }
+jigawatt-config = { path = "config" }
+jigawatt-networking = { path = "networking" }
+jigawatt-logger = { path = "logger" }
+jigawatt-compat = { path = "compat" }

@@ -1,5 +1,3 @@
-extern crate util;
-
 use std::collections::Bound;
 use std::error::Error;
 use std::f64::{INFINITY, NEG_INFINITY};
@@ -8,7 +6,7 @@ use std::iter;
 use std::num::{ParseFloatError, ParseIntError};
 use std::str::{from_utf8, Utf8Error};
 
-use util::format_repr;
+use jigawatt_util::format_repr;
 
 /// A command argument
 #[derive(Debug, Clone)]

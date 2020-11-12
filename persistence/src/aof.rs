@@ -7,7 +7,7 @@ use std::io::Write;
 use std::path::Path;
 use std::usize;
 
-use parser::ParsedCommand;
+use jigawatt_parser::ParsedCommand;
 
 pub struct Aof {
     fp: File,

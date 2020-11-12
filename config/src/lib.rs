@@ -1,9 +1,3 @@
-#[macro_use(log_and_exit)]
-extern crate logger;
-extern crate rand;
-extern crate time;
-extern crate util;
-
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufRead;
@@ -16,8 +10,8 @@ use std::str::from_utf8;
 use std::str::FromStr;
 use std::str::Utf8Error;
 
-use logger::{Level, Logger};
-use util::splitargs;
+use jigawatt_logger::{log_and_exit, Level, Logger};
+use jigawatt_util::splitargs;
 
 pub struct Config {
     pub logger: Logger,

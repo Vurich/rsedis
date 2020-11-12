@@ -11,11 +11,11 @@ use std::{
 
 use bitflags::bitflags;
 
-use compat::{getos, getpid};
-use database::{zset, Database, PubsubEvent, Value};
-use parser::{Argument, OwnedParsedCommand, ParsedCommand};
-use response::{Response, ResponseError};
-use util::mstime;
+use jigawatt_compat::{getos, getpid};
+use jigawatt_database::{zset, Database, PubsubEvent, Value};
+use jigawatt_parser::{Argument, OwnedParsedCommand, ParsedCommand};
+use jigawatt_response::{Response, ResponseError};
+use jigawatt_util::mstime;
 
 pub mod aof;
 

@@ -2,11 +2,16 @@ use std::collections::LinkedList;
 use std::io;
 use std::io::Write;
 
-use crate::{dbutil::normalize_position, error::OperationError};
-use rdbutil::constants::{TYPE_LIST, VERSION};
-use rdbutil::{encode_len, encode_slice_u8};
+use serde::{Deserialize, Serialize};
 
-#[derive(PartialEq, Debug, Clone)]
+use crate::{dbutil::normalize_position, error::OperationError};
+
+use jigawatt_rdbutil::{
+    constants::{TYPE_LIST, VERSION},
+    encode_len, encode_slice_u8,
+};
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum ValueList {
     Data(LinkedList<Vec<u8>>),
 }

@@ -1,6 +1,6 @@
 [package]
 authors = ["Sebastian Waisbrot <seppo0010@gmail.com>"]
-name = "database"
+name = "jigawatt-database"
 version = "0.1.0"
 edition = "2018"
 
@@ -10,24 +10,12 @@ rand = "0.3"
 rehashinghashmap = "0.1"
 skiplist = "0.3"
 basichll = "0.3"
-
-[dependencies.config]
-path = "../config"
-
-[dependencies.logger]
-path = "../logger"
-
-[dependencies.parser]
-path = "../parser"
-
-[dependencies.persistence]
-path = "../persistence"
-
-[dependencies.rdbutil]
-path = "./rdbutil"
-
-[dependencies.response]
-path = "../response"
-
-[dependencies.util]
-path = "../util"
+serde = { version = "1.0", features = ["derive"] }
+jigawatt-config = { path = "../config" }
+jigawatt-logger = { path = "../logger" }
+jigawatt-parser = { path = "../parser" }
+jigawatt-persistence = { path = "../persistence" }
+jigawatt-rdbutil = { path = "../rdbutil" }
+jigawatt-response = { path = "../response" }
+jigawatt-util = { path = "../util" }
+jigawatt-storage = { path = "../storage" }

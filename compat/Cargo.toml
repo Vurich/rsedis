@@ -1,5 +1,5 @@
 [package]
-name = "compat"
+name = "jigawatt-compat"
 version = "0.1.0"
 authors = ["Sebastian Waisbrot <seppo0010@gmail.com>"]
 

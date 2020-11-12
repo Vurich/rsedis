@@ -1,14 +1,11 @@
 [package]
-name = "config"
+name = "jigawatt-config"
 version = "0.1.0"
 authors = ["Sebastian Waisbrot <seppo0010@gmail.com>"]
-
-[dependencies.logger]
-path = "../logger"
-
-[dependencies.util]
-path = "../util"
+edition = "2018"
 
 [dependencies]
 time = "0.1"
 rand = "0.3"
+jigawatt-logger = { path = "../logger" }
+jigawatt-util = { path = "../util" }

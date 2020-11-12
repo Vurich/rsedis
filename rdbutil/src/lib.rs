@@ -1,4 +1,3 @@
-extern crate util;
 pub mod constants;
 
 use std::i64;
@@ -8,7 +7,7 @@ use std::u32;
 #[cfg(test)]
 use std::usize;
 
-use util::htonl;
+use jigawatt_util::htonl;
 
 #[derive(Debug)]
 pub enum EncodeError {

@@ -8,9 +8,13 @@ use std::io::Write;
 
 use crate::{dbutil::normalize_position, error::OperationError};
 
-use rdbutil::constants::{TYPE_ZSET, VERSION};
-use rdbutil::{encode_len, encode_slice_u8};
+use serde::{Deserialize, Serialize};
 use skiplist::OrderedSkipList;
+
+use jigawatt_rdbutil::{
+    constants::{TYPE_ZSET, VERSION},
+    encode_len, encode_slice_u8,
+};
 
 pub enum Aggregate {
     Sum,
@@ -110,6 +114,24 @@ impl PartialOrd for SortedSetMember {
 pub enum ValueSortedSet {
     // FIXME: Vec<u8> is repeated in memory
     Data(OrderedSkipList<SortedSetMember>, HashMap<Vec<u8>, f64>),
+}
+
+impl<'de> Deserialize<'de> for ValueSortedSet {
+    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        unimplemented!()
+    }
+}
+
+impl Serialize for ValueSortedSet {
+    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        unimplemented!()
+    }
 }
 
 impl Default for ValueSortedSet {

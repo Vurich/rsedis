@@ -1,7 +1,8 @@
 [package]
-name = "response"
+name = "jigawatt-response"
 version = "0.1.0"
 authors = ["Sebastian Waisbrot <seppo0010@gmail.com>"]
+edition = "2018"
 
-[dependencies.parser]
-path = "../parser"
+[dependencies]
+jigawatt-parser = { path = "../parser" }

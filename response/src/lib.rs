@@ -1,9 +1,7 @@
-extern crate parser;
-
 use std::fmt::{Debug, Error, Formatter};
 use std::sync::mpsc::Receiver;
 
-use parser::OwnedParsedCommand;
+use jigawatt_parser::OwnedParsedCommand;
 
 /// A command response to send to a client
 #[derive(PartialEq, Debug)]

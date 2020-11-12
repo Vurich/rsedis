@@ -15,16 +15,17 @@ use std::ops::RangeFull;
 use std::path::Path;
 use std::sync::mpsc::Sender;
 
-use config::Config;
 use crc64::crc64;
-use logger::{Level, Logger};
-use parser::ParsedCommand;
-use persistence::aof::Aof;
 use rehashinghashmap::RehashingHashMap;
-use response::Response;
-use util::{get_random_hex_chars, glob_match, mstime};
+use serde::{Deserialize, Serialize};
 
-use rdbutil::encode_u64_to_slice_u8;
+use jigawatt_config::Config;
+use jigawatt_logger::{Level, Logger};
+use jigawatt_parser::ParsedCommand;
+use jigawatt_persistence::aof::Aof;
+use jigawatt_rdbutil::encode_u64_to_slice_u8;
+use jigawatt_response::Response;
+use jigawatt_util::{get_random_hex_chars, glob_match, mstime};
 
 use crate::{
     error::OperationError, list::ValueList, set::ValueSet, string::ValueString,
@@ -34,7 +35,7 @@ use crate::{
 const ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP: usize = 20;
 
 /// Any value storable in the database
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Serialize, Deserialize)]
 pub enum Value {
     /// Nil should not be stored, but it is used as a default for initialized values
     Nil,
@@ -2296,7 +2297,7 @@ impl Database {
             let mut err = false;
             if let Some(w) = &mut self.aof {
                 if let Err(e) = w.write(dbindex, command) {
-                    logger::log!(
+                    jigawatt_logger::log!(
                         self.config.logger,
                         Warning,
                         "Error writing aof {:?}; stopped writing",

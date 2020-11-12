@@ -1,5 +1,3 @@
-use logger::{log, sendlog};
-
 use std::{
     io::{self, Read, Write},
     net::{SocketAddr, TcpStream, ToSocketAddrs},
@@ -19,11 +17,12 @@ use std::{fs::File, path::Path};
 #[cfg(unix)]
 use unix_socket::{UnixListener, UnixStream};
 
-use config::Config;
-use database::Database;
-use logger::Level;
-use parser::{OwnedParsedCommand, ParseError, Parser};
-use response::{Response, ResponseError};
+use jigawatt_config::Config;
+use jigawatt_database::Database;
+use jigawatt_logger::Level;
+use jigawatt_logger::{log, sendlog};
+use jigawatt_parser::{OwnedParsedCommand, ParseError, Parser};
+use jigawatt_response::{Response, ResponseError};
 
 /// A stream connection.
 #[cfg(unix)]
@@ -218,7 +217,7 @@ impl Client {
         let (stream_tx, rx) = channel::<Option<Response>>();
         self.create_writer_thread(sender.clone(), rx);
 
-        let mut client = command::Client::new(stream_tx.clone(), self.id);
+        let mut client = jigawatt_command::Client::new(stream_tx.clone(), self.id);
         let mut parser = Parser::new();
 
         let mut this_command: Option<OwnedParsedCommand>;
@@ -293,7 +292,7 @@ impl Client {
                 };
 
                 // execute the command
-                command::command(parsed_command, &mut *db, &mut client)
+                jigawatt_command::command(parsed_command, &mut *db, &mut client)
             };
 
             // check out the response
@@ -420,7 +419,7 @@ impl Server {
         }
     }
 
-    pub fn get_mut_db(&self) -> MutexGuard<database::Database> {
+    pub fn get_mut_db(&self) -> MutexGuard<jigawatt_database::Database> {
         self.db.lock().unwrap()
     }
 
@@ -574,7 +573,7 @@ impl Server {
 
         let mut db = self.db.lock().unwrap();
         if db.aof.is_some() {
-            command::aof::load(&mut *db);
+            jigawatt_command::aof::load(&mut *db);
         }
     }
 

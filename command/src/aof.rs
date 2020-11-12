@@ -1,9 +1,9 @@
 use std::io::Read;
 use std::sync::mpsc::channel;
 
-use database::Database;
-use logger::Level;
-use parser::{ParseError, Parser};
+use jigawatt_database::Database;
+use jigawatt_logger::Level;
+use jigawatt_parser::{ParseError, Parser};
 
 const UNEXPECTED_END: &str =
     "Unexpected end of file reading the append only file. You can: 1) Make a backup of your AOF \
@@ -32,7 +32,13 @@ pub fn load(db: &mut Database) {
             if len == 0 {
                 if parser.written > parser.position {
                     if !db.config.aof_load_truncated {
-                        logger::log_and_exit!(db.config.logger, Warning, 1, "{}", UNEXPECTED_END);
+                        jigawatt_logger::log_and_exit!(
+                            db.config.logger,
+                            Warning,
+                            1,
+                            "{}",
+                            UNEXPECTED_END
+                        );
                     }
                     aof.truncate(parser.position);
                 }
@@ -49,7 +55,7 @@ pub fn load(db: &mut Database) {
                     }
                     // TODO: break, continue, or panic?
                     ParseError::BadProtocol(s) => {
-                        logger::log!(
+                        jigawatt_logger::log!(
                             db.config.logger,
                             Warning,
                             "Bad file format reading the append only file {:?}",
@@ -65,7 +71,7 @@ pub fn load(db: &mut Database) {
         crate::command(parsed_command, db, &mut client).unwrap();
     }
     if client.multi && !db.config.aof_load_truncated {
-        logger::log_and_exit!(db.config.logger, Warning, 1, "{}", UNEXPECTED_END);
+        jigawatt_logger::log_and_exit!(db.config.logger, Warning, 1, "{}", UNEXPECTED_END);
     }
     db.aof = Some(aof);
     db.loading = false;

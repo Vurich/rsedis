@@ -4,14 +4,17 @@ use std::io::Write;
 
 use crate::dbutil::{usize_to_vec, vec_to_usize};
 
-use rdbutil::constants::{TYPE_SET, TYPE_SET_INTSET, VERSION};
-use rdbutil::{encode_len, encode_slice_u8, EncodeError};
-use rdbutil::{encode_u16_to_slice_u8, encode_u32_to_slice_u8, encode_u64_to_slice_u8};
-
 use rand::distributions::{IndependentSample, Range, Sample};
 use rand::thread_rng;
+use serde::{Deserialize, Serialize};
 
-#[derive(PartialEq, Debug, Clone)]
+use jigawatt_rdbutil::{
+    constants::{TYPE_SET, TYPE_SET_INTSET, VERSION},
+    encode_len, encode_slice_u8, encode_u16_to_slice_u8, encode_u32_to_slice_u8,
+    encode_u64_to_slice_u8, EncodeError,
+};
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum ValueSet {
     Integer(HashSet<usize>),
     Data(HashSet<Vec<u8>>),
