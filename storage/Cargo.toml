@@ -3,7 +3,20 @@ name = "jigawatt-storage"
 version = "0.1.0"
 authors = ["Jack Fransham <jack.fransham@elektron.se>"]
 edition = "2018"
-description = "Storage"
-license = "MIT-0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+serde = { version = "1.0", features = ["derive"] }
+bit_utils = "0.1"
+bincode = "1.3"
+byteorder = "1.3"
+fxhash = "0.2"
+smallstr = "0.2"
+smallvec = "1.4"
+crc32fast = "1.2"
+positioned-io = "0.2"
+beef = "0.4"
+
+[features]
+nightly = []
