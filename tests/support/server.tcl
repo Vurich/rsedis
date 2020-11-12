@@ -210,7 +210,7 @@ proc start_server {options {code undefined}} {
     if {$::valgrind} {
         set pid [exec valgrind --track-origins=yes --suppressions=src/valgrind.sup --show-reachable=no --show-possibly-lost=no --leak-check=full ./target/debug/rsedis $config_file > $stdout 2> $stderr &]
     } else {
-        set pid [exec ./target/debug/rsedis $config_file > $stdout 2> $stderr &]
+        set pid [exec $::bin_path $config_file > $stdout 2> $stderr &]
     }
 
     # Tell the test server about this new instance.

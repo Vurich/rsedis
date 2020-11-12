@@ -59,6 +59,7 @@ set ::host 127.0.0.1
 set ::port 21111
 set ::traceleaks 0
 set ::valgrind 0
+set ::bin_path "./target/debug/jgwt"
 set ::verbose 0
 set ::quiet 0
 set ::denytags {}
@@ -414,6 +415,9 @@ for {set j 0} {$j < [llength $argv]} {incr j} {
                 lappend ::allowtags $tag
             }
         }
+        incr j
+    } elseif {$opt eq {--bin}} {
+        set ::bin_path $arg
         incr j
     } elseif {$opt eq {--valgrind}} {
         set ::valgrind 1

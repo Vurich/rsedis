@@ -1,7 +1,7 @@
 [package]
-name = "rsedis"
+name = "jigawatt"
 version = "0.0.1"
-authors = [ "Sebastian Waisbrot <seppo0010@gmail.com>" ]
+authors = ["Sebastian Waisbrot <seppo0010@gmail.com>", "Jack Fransham <jack.fransham@elektron.se>"]
 exclude = [
     ".gitignore",
     ".travis.yml",
@@ -21,35 +21,16 @@ members = [
     "networking",
     "logger",
     "compat",
+    "storage",
 ]
 
 [[bin]]
-name = "rsedis"
+name = "jgwt"
+path = "src/main.rs"
 doc = false
 
-[dependencies.config]
-path = "config"
-
-[dependencies.util]
-path = "util"
-
-[dependencies.parser]
-path = "parser"
-
-[dependencies.response]
-path = "response"
-
-[dependencies.database]
-path = "database"
-
-[dependencies.command]
-path = "command"
-
-[dependencies.networking]
-path = "networking"
-
-[dependencies.logger]
-path = "logger"
-
-[dependencies.compat]
-path = "compat"
+[dependencies]
+config = { path = "config" }
+networking = { path = "networking" }
+logger = { path = "logger" }
+compat = { path = "compat" }

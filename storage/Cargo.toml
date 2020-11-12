@@ -1,0 +1,9 @@
+[package]
+name = "jigawatt-storage"
+version = "0.1.0"
+authors = ["Jack Fransham <jack.fransham@elektron.se>"]
+edition = "2018"
+description = "Storage"
+license = "MIT-0"
+
+[dependencies]

@@ -1,8 +1,4 @@
-use std::fs::File;
-use std::io::Write;
-use std::process::Command;
-use std::str::from_utf8;
-use std::{env, path};
+use std::{env, fs::File, io::Write, path, process::Command, str::from_utf8};
 
 fn main() {
     let path = path::Path::new(&env::var_os("OUT_DIR").unwrap()).join("release.rs");
