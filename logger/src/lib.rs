@@ -164,60 +164,51 @@ impl Level {
     }
 }
 
-#[derive(Clone)]
 #[cfg(unix)]
-pub struct Logger {
-    // this might be ugly, but here it goes...
-    /// To change the Output target, send `(Some(Output), None, None, None)`
-    /// To change the Level target, send `(None, Some(Level), None, None)`
-    /// To log a message send `(None, Some(Level), Some(String), None)` where the
-    /// level is the message level
-    /// If the last parameter is not none, it will exit the process with that exit code
-    tx: Sender<(
-        Option<Output>,
-        Option<Level>,
-        Option<String>,
-        Option<Option<Box<syslog::Logger>>>,
-        Option<i32>,
-    )>,
+type Syslog = Option<Box<syslog::Logger>>;
+#[cfg(not(unix))]
+type Syslog = ();
+
+enum LogMessageKind {
+    ChangeOutput(Output),
+    ChangeLevel(Level),
+    ChangeSyslog(Syslog),
+    Log(Level, String),
 }
 
-#[derive(Clone)]
-#[cfg(not(unix))]
+struct LogMessage {
+    kind: LogMessageKind,
+    exit_code: Option<i32>,
+}
+
+impl From<LogMessageKind> for LogMessage {
+    fn from(kind: LogMessageKind) -> Self {
+        Self {
+            kind,
+            exit_code: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct Logger {
-    // this might be ugly, but here it goes...
-    /// To change the Output target, send `(Some(Output), None, None, None)`
-    /// To change the Level target, send `(None, Some(Level), None, None)`
-    /// To log a message send `(None, Some(Level), Some(String), None)` where the
-    /// level is the message level
-    tx: Sender<(
-        Option<Output>,
-        Option<Level>,
-        Option<String>,
-        Option<()>,
-        Option<i32>,
-    )>,
+    tx: Sender<LogMessage>,
 }
 
 impl Logger {
     /// Creates a new `Logger` for a given `Output` and severity `Level`.
     #[cfg(unix)]
     fn create(level: Level, output: Output) -> Logger {
-        let (tx, rx) = channel::<(
-            Option<Output>,
-            Option<Level>,
-            Option<String>,
-            Option<Option<Box<syslog::Logger>>>,
-            Option<i32>,
-        )>();
+        let (tx, rx) = channel::<LogMessage>();
         {
             let mut level = level;
             let mut output = output;
-            let mut syslog_writer: Option<Box<syslog::Logger>> = None;
+            let mut syslog_writer: Syslog = Default::default();
+
             thread::spawn(move || {
-                while let Ok((out, lvl, msg, syslog, code)) = rx.recv() {
-                    match (out, lvl, msg, syslog) {
-                        (_, Some(lvl), Some(msg), _) => {
+                while let Ok(message) = rx.recv() {
+                    match message.kind {
+                        LogMessageKind::Log(lvl, msg) => {
                             if level.contains(&lvl) {
                                 match write!(output, "{}", format!("{}\n", msg)) {
                                     Ok(_) => (),
@@ -247,21 +238,18 @@ impl Logger {
                                 }
                             }
                         }
-                        (_, Some(lvl), _, _) => {
+                        LogMessageKind::ChangeLevel(lvl) => {
                             level = lvl;
                         }
-                        (Some(out), _, _, _) => {
+                        LogMessageKind::ChangeOutput(out) => {
                             output = out;
                         }
-                        (_, _, _, Some(syslog)) => {
+                        LogMessageKind::ChangeSyslog(syslog) => {
                             syslog_writer = syslog;
-                        }
-                        (out, lvl, msg, syslog) => {
-                            panic!("Unknown message {:?}", (out, lvl, msg, syslog.is_some()));
                         }
                     }
 
-                    if let Some(code) = code {
+                    if let Some(code) = message.exit_code {
                         process::exit(code);
                     }
                 }
@@ -269,54 +257,6 @@ impl Logger {
         }
 
         Logger { tx }
-    }
-
-    #[cfg(not(unix))]
-    fn create(level: Level, output: Output) -> Logger {
-        let (tx, rx) = channel::<(
-            Option<Output>,
-            Option<Level>,
-            Option<String>,
-            Option<()>,
-            Option<i32>,
-        )>();
-        {
-            let mut level = level;
-            let mut output = output;
-            thread::spawn(move || {
-                loop {
-                    let (_output, _level, _msg, _, _code) = match rx.recv() {
-                        Ok(m) => m,
-                        Err(_) => break,
-                    };
-                    if _msg.is_some() {
-                        let lvl = _level.unwrap();
-                        if level.contains(&lvl) {
-                            let msg = _msg.unwrap();
-                            match write!(output, "{}", format!("{}\n", msg)) {
-                                Ok(_) => (),
-                                Err(e) => {
-                                    // failing to log a message... will write straight to stderr
-                                    // if we cannot do that, we'll panic
-                                    write!(stderr(), "Failed to log {:?} {}", e, msg).unwrap();
-                                }
-                            };
-                        }
-                    } else if _level.is_some() {
-                        level = _level.unwrap();
-                    } else if _output.is_some() {
-                        output = _output.unwrap();
-                    } else {
-                        panic!("Unknown message {:?}", (_output, _level, _msg));
-                    }
-                    if let Some(code) = _code {
-                        process::exit(code);
-                    }
-                }
-            });
-        }
-
-        Logger { tx: tx }
     }
 
     /// Creates a new logger that writes in the standard output.
@@ -372,7 +312,9 @@ impl Logger {
     /// Disables syslog
     #[cfg(unix)]
     pub fn disable_syslog(&mut self) {
-        self.tx.send((None, None, None, Some(None), None)).unwrap();
+        self.tx
+            .send(LogMessageKind::ChangeSyslog(None).into())
+            .unwrap();
     }
 
     #[cfg(not(unix))]
@@ -395,7 +337,7 @@ impl Logger {
         .unwrap();
         w.set_process_name(ident.to_owned());
         self.tx
-            .send((None, None, None, Some(Some(w)), None))
+            .send(LogMessageKind::ChangeSyslog(Some(w)).into())
             .unwrap();
     }
 
@@ -405,13 +347,17 @@ impl Logger {
     /// Changes the output to be a file in `path`.
     pub fn set_logfile(&mut self, path: &str) -> io::Result<()> {
         let file = Output::File(File::create(Path::new(path))?, path.to_owned());
-        self.tx.send((Some(file), None, None, None, None)).unwrap();
+        self.tx
+            .send(LogMessageKind::ChangeOutput(file).into())
+            .unwrap();
         Ok(())
     }
 
     /// Changes the log level.
     pub fn set_loglevel(&mut self, level: Level) {
-        self.tx.send((None, Some(level), None, None, None)).unwrap();
+        self.tx
+            .send(LogMessageKind::ChangeLevel(level).into())
+            .unwrap();
     }
 
     /// Creates a new sender to log messages.
@@ -420,7 +366,7 @@ impl Logger {
         let tx2 = self.tx.clone();
         thread::spawn(move || {
             while let Ok((level, message)) = rx.recv() {
-                match tx2.send((None, Some(level), Some(message), None, None)) {
+                match tx2.send(LogMessageKind::Log(level, message).into()) {
                     Ok(_) => (),
                     Err(_) => break,
                 };
@@ -431,9 +377,10 @@ impl Logger {
 
     /// Logs a message with a log level.
     pub fn log(&self, level: Level, msg: String, code: Option<i32>) {
-        self.tx
-            .send((None, Some(level), Some(msg), None, code))
-            .unwrap();
+        let mut msg: LogMessage = LogMessageKind::Log(level, msg).into();
+        msg.exit_code = code;
+
+        self.tx.send(msg).unwrap();
     }
 }
 
