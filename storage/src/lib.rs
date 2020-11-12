@@ -131,7 +131,7 @@ type OrSavedState<T> = Result<T, Option<T>>;
 // TODO: Use a memory map instead of calling out to the system constantly, especially
 //       for reads.
 #[derive(Debug)]
-pub struct Db<File> {
+pub struct Db<File = std::fs::File> {
     backing_file: Tracking<File>,
     pending: OrSavedState<HashMap<Cow<'static, str>, ValueData, fxhash::FxBuildHasher>>,
     state: Option<Vec<(Cow<'static, str>, ValueData)>>,
@@ -145,6 +145,12 @@ pub struct Db<File> {
 pub struct DbOptions {
     /// The maximum possible size of the history.
     pub history_size: u16,
+}
+
+impl Default for DbOptions {
+    fn default() -> Self {
+        Self { history_size: 100 }
+    }
 }
 
 #[derive(Default)]
@@ -381,9 +387,10 @@ where
             return Err(io::Error::from(io::ErrorKind::UnexpectedEof));
         }
 
-        let out = self.file.read_exact_at(self.value.offset as u64, buf)?;
+        self.file.read_exact_at(self.value.offset as u64, buf)?;
         self.advance(buf.len() as u32);
-        Ok(out)
+
+        Ok(())
     }
 }
 
@@ -499,6 +506,32 @@ impl<File> Db<File>
 where
     File: Read + ReadAt + Seek,
 {
+    /// The number of items in the database. This doesn't currently take into account pending items
+    pub fn len(&self) -> io::Result<usize> {
+        use byteorder::ReadBytesExt;
+
+        if let Some(state) = &self.state {
+            Ok(state.len())
+        } else if let Some(cur) = &self.cur {
+            let mut buf = [0u8; mem::size_of::<u16>()];
+
+            self.backing_file.read_exact_at(
+                cur.offset as u64 + cur.size as u64 - EOCD_SIZE as u64
+                    + mem::size_of::<u32>() as u64,
+                &mut buf,
+            )?;
+
+            Ok((&mut &buf[..]).read_u16::<byteorder::LittleEndian>()? as usize)
+        } else {
+            Ok(0)
+        }
+    }
+
+    /// Whether the database is empty. This doesn't currently take into account pending items.
+    pub fn is_empty(&self) -> io::Result<bool> {
+        Ok(self.len()? == 0)
+    }
+
     fn state(&mut self) -> io::Result<&[(Cow<'static, str>, ValueData)]> {
         if self.state.is_none() {
             self.read_state()?;
@@ -559,7 +592,7 @@ where
         } else {
             let state = self.state()?;
 
-            if let Some(index) = state.binary_search_by_key(&key, |(k, _)| &k[..]).ok() {
+            if let Ok(index) = state.binary_search_by_key(&key, |(k, _)| &k[..]) {
                 Ok(state.get(index).map(|&(_, v)| v))
             } else {
                 Ok(None)
@@ -640,7 +673,7 @@ where
         name: out,
         value: ValueData {
             size,
-            header_size: header_size,
+            header_size,
             offset: offset + header_size,
             crc32,
         },

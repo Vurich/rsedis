@@ -5,15 +5,17 @@ pub mod set;
 pub mod string;
 pub mod zset;
 
-use std::collections::Bound;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::env;
-use std::io::Write;
-use std::iter::FromIterator;
-use std::ops::RangeFull;
-use std::path::Path;
-use std::sync::mpsc::Sender;
+use std::{
+    collections::Bound,
+    collections::HashMap,
+    collections::HashSet,
+    env,
+    io::Write,
+    iter::FromIterator,
+    ops::{Deref, DerefMut, RangeFull},
+    path::Path,
+    sync::mpsc::Sender,
+};
 
 use crc64::crc64;
 use rehashinghashmap::RehashingHashMap;
@@ -25,6 +27,7 @@ use jigawatt_parser::ParsedCommand;
 use jigawatt_persistence::aof::Aof;
 use jigawatt_rdbutil::encode_u64_to_slice_u8;
 use jigawatt_response::Response;
+use jigawatt_storage::Db;
 use jigawatt_util::{get_random_hex_chars, glob_match, mstime};
 
 use crate::{
@@ -43,6 +46,12 @@ pub enum Value {
     List(ValueList),
     Set(ValueSet),
     SortedSet(ValueSortedSet),
+}
+
+impl Default for Value {
+    fn default() -> Self {
+        Self::Nil
+    }
 }
 
 /// Events relevant for clients in pubsub mode
@@ -105,7 +114,7 @@ impl PubsubEvent {
 /// If a Value is nil, `default` is used.
 /// If any of the values is not a set, an error is returned instead.
 fn get_set_list<'a>(
-    set_values: &[&'a Value],
+    set_values: &'a [Value],
     default: &'a ValueSet,
 ) -> Result<Vec<&'a ValueSet>, OperationError> {
     let mut sets = Vec::with_capacity(set_values.len());
@@ -116,6 +125,7 @@ fn get_set_list<'a>(
             _ => return Err(OperationError::WrongTypeError),
         });
     }
+
     Ok(sets)
 }
 
@@ -123,7 +133,7 @@ fn get_set_list<'a>(
 /// If a Value is nil, `default` is used.
 /// If any of the values is not a zset, an error is returned instead.
 fn get_zset_list<'a>(
-    zset_values: &[&'a Value],
+    zset_values: &'a [Value],
     default: &'a ValueSortedSet,
 ) -> Result<Vec<&'a ValueSortedSet>, OperationError> {
     let mut zsets = Vec::with_capacity(zset_values.len());
@@ -495,11 +505,11 @@ impl Value {
     /// assert!(val.pfmerge(vec![&val1, &val2, &val3]).is_ok());
     /// assert_eq!(val.pfcount().unwrap(), 4);
     /// ```
-    pub fn pfmerge(&mut self, values: Vec<&Value>) -> Result<(), OperationError> {
+    pub fn pfmerge(&mut self, values: Vec<Value>) -> Result<(), OperationError> {
         let mut values_string = Vec::with_capacity(values.len());
         for v in values {
             match v {
-                Value::Nil => (),
+                Value::Nil => {}
                 Value::String(s) => values_string.push(s),
                 _ => return Err(OperationError::WrongTypeError),
             }
@@ -950,7 +960,7 @@ impl Value {
     /// let set = vec![vec![3]].into_iter().collect::<HashSet<_>>();
     /// assert_eq!(val1.sdiff(&vec![&val2, &val3]).unwrap(), set);
     /// ```
-    pub fn sdiff(&self, set_values: &[&Value]) -> Result<HashSet<Vec<u8>>, OperationError> {
+    pub fn sdiff(&self, set_values: &[Value]) -> Result<HashSet<Vec<u8>>, OperationError> {
         match self {
             Value::Nil => Ok(HashSet::new()),
             Value::Set(value) => {
@@ -982,7 +992,7 @@ impl Value {
     /// let set = vec![vec![1]].into_iter().collect::<HashSet<_>>();
     /// assert_eq!(val1.sinter(&vec![&val2, &val3]).unwrap(), set);
     /// ```
-    pub fn sinter(&self, set_values: &[&Value]) -> Result<HashSet<Vec<u8>>, OperationError> {
+    pub fn sinter(&self, set_values: &[Value]) -> Result<HashSet<Vec<u8>>, OperationError> {
         match self {
             Value::Nil => Ok(HashSet::new()),
             Value::Set(value) => {
@@ -1012,7 +1022,7 @@ impl Value {
     /// let set = vec![vec![1], vec![2], vec![3]].into_iter().collect::<HashSet<_>>();
     /// assert_eq!(val1.sunion(&vec![&val2, &val3]).unwrap(), set);
     /// ```
-    pub fn sunion(&self, set_values: &[&Value]) -> Result<HashSet<Vec<u8>>, OperationError> {
+    pub fn sunion(&self, set_values: &[Value]) -> Result<HashSet<Vec<u8>>, OperationError> {
         let emptyset = ValueSet::new();
         let sets = get_set_list(set_values, &emptyset)?;
 
@@ -1530,7 +1540,7 @@ impl Value {
     /// ```
     pub fn zunion(
         &self,
-        zset_values: &[&Value],
+        zset_values: &[Value],
         weights: Option<Vec<f64>>,
         aggregate: zset::Aggregate,
     ) -> Result<Value, OperationError> {
@@ -1583,7 +1593,7 @@ impl Value {
     /// ```
     pub fn zinter(
         &self,
-        zset_values: &[&Value],
+        zset_values: &[Value],
         weights: Option<Vec<f64>>,
         aggregate: zset::Aggregate,
     ) -> Result<Value, OperationError> {
@@ -1650,7 +1660,7 @@ type SenderMap<T> = HashMap<usize, Sender<T>>;
 pub struct Database {
     pub config: Config,
 
-    data: Vec<RehashingHashMap<Vec<u8>, Value>>,
+    data: Vec<Db>,
 
     /// Maps a key to an expiration time. Expiration time is in milliseconds.
     data_expiration_ms: Vec<RehashingHashMap<Vec<u8>, i64>>,
@@ -1689,6 +1699,38 @@ pub struct Database {
     pub aof: Option<Aof>,
     /// Is it loading data from a file
     pub loading: bool,
+}
+
+pub struct ValueRef<'a> {
+    db: &'a mut Database,
+    index: usize,
+    key: Option<String>,
+    value: Value,
+}
+
+impl Deref for ValueRef<'_> {
+    type Target = Value;
+
+    fn deref(&self) -> &Value {
+        &self.value
+    }
+}
+
+impl DerefMut for ValueRef<'_> {
+    fn deref_mut(&mut self) -> &mut Value {
+        &mut self.value
+    }
+}
+
+impl<'a> Drop for ValueRef<'a> {
+    fn drop(&mut self) {
+        self.db.data[self.index]
+            .insert(
+                self.key.take().unwrap(),
+                &bincode::serialize(&self.value).unwrap(),
+            )
+            .unwrap();
+    }
 }
 
 pub struct Iter<'a> {
@@ -1732,8 +1774,9 @@ impl Database {
         let mut data_expiration_ms = Vec::with_capacity(size);
         let mut key_subscribers = Vec::with_capacity(size);
         let mut watched_keys = Vec::with_capacity(size);
+
         for _ in 0..size {
-            data.push(RehashingHashMap::new());
+            data.push(Db::new(tempfile::tempfile().unwrap(), Default::default()).unwrap());
             data_expiration_ms.push(RehashingHashMap::new());
             key_subscribers.push(RehashingHashMap::new());
             watched_keys.push(HashMap::new());
@@ -1792,7 +1835,7 @@ impl Database {
     /// assert_eq!(db.dbsize(0), 1);
     /// ```
     pub fn dbsize(&self, index: usize) -> usize {
-        self.data[index].len()
+        self.data[index].len().unwrap()
     }
 
     pub fn db_expire_size(&self, index: usize) -> usize {
@@ -1816,11 +1859,16 @@ impl Database {
     ///
     /// assert_eq!(db.get(0, &vec![1]), Some(&value));
     /// ```
-    pub fn get(&self, index: usize, key: &[u8]) -> Option<&Value> {
+    pub fn get(&mut self, index: usize, key: &[u8]) -> Option<Value> {
         if self.is_expired(index, key) {
             None
         } else {
-            self.data[index].get(key)
+            bincode::deserialize_from(
+                self.data[index]
+                    .get(std::str::from_utf8(key).unwrap())
+                    .unwrap()?,
+            )
+            .unwrap()
         }
     }
 
@@ -1837,12 +1885,19 @@ impl Database {
     /// db.get_or_create(0, &vec![1]).set(vec![1]).unwrap();
     /// db.get_mut(0, &vec![1]).unwrap().set(vec![2]);
     /// ```
-    pub fn get_mut(&mut self, index: usize, key: &[u8]) -> Option<&mut Value> {
+    pub fn get_mut(&mut self, index: usize, key: &[u8]) -> Option<ValueRef<'_>> {
         if self.is_expired(index, key) {
             self.remove(index, key);
             None
         } else {
-            self.data[index].get_mut(key)
+            let value = self.get(index, key)?;
+
+            Some(ValueRef {
+                db: self,
+                index,
+                key: Some(std::str::from_utf8(key).unwrap().to_owned()),
+                value,
+            })
         }
     }
 
@@ -1859,29 +1914,8 @@ impl Database {
     /// db.get_or_create(0, &vec![1]).set(vec![1]).unwrap();
     /// assert!(db.remove(0, &vec![1]).is_some());
     /// ```
-    pub fn remove(&mut self, index: usize, key: &[u8]) -> Option<Value> {
-        let mut r = self.data[index].remove(key);
-        if self.is_expired(index, key) {
-            r = None;
-        }
-
-        self.data_expiration_ms[index].remove(key);
-        if self.config.active_rehashing {
-            if self.data[index].len() * 10 / 12 < self.data[index].capacity() {
-                self.data[index].shrink_to_fit();
-            }
-            if self.data_expiration_ms[index].len() * 10 / 12
-                < self.data_expiration_ms[index].capacity()
-            {
-                self.data_expiration_ms[index].shrink_to_fit();
-            }
-            if self.key_subscribers[index].len() * 10 / 12 < self.key_subscribers[index].capacity()
-            {
-                self.key_subscribers[index].shrink_to_fit();
-            }
-        }
-
-        r
+    pub fn remove(&mut self, _index: usize, _key: &[u8]) -> Option<Value> {
+        unimplemented!()
     }
 
     /// Sets a key expiration time, in milliseconds.
@@ -1901,19 +1935,8 @@ impl Database {
     }
 
     /// Removes all keys in a database.
-    pub fn clear(&mut self, index: usize) {
-        // FIXME: remove clone
-        let keys = self.watched_keys[index]
-            .keys()
-            .cloned()
-            .collect::<HashSet<_>>();
-        for key in keys {
-            if self.data[index].remove(&key).is_some() {
-                self.key_updated(index, &key);
-            }
-        }
-        self.data[index].clear();
-        self.data_expiration_ms[index].clear();
+    pub fn clear(&mut self, _index: usize) {
+        unimplemented!()
     }
 
     /// Returns a mutable reference to a value for a key. If the value was not
@@ -1932,18 +1955,18 @@ impl Database {
     /// db.get_or_create(0, &vec![1]).append(vec![2]).unwrap();
     /// assert_eq!(db.get(0, &vec![1]).unwrap().strlen().unwrap(), 2);
     /// ```
-    pub fn get_or_create(&mut self, index: usize, key: &[u8]) -> &mut Value {
-        use std::collections::hash_map::Entry;
-
-        let val = Value::Nil;
-
+    pub fn get_or_create(&mut self, index: usize, key: &[u8]) -> ValueRef<'_> {
         if self.is_expired(index, key) {
             self.remove_msexpiration(index, key);
         }
 
-        match self.data[index].entry(key.to_vec()) {
-            Entry::Occupied(entry) => entry.into_mut(),
-            Entry::Vacant(entry) => entry.insert(val),
+        let value = self.get(index, key).unwrap_or_default();
+
+        ValueRef {
+            db: self,
+            index,
+            key: Some(std::str::from_utf8(key).unwrap().to_owned()),
+            value,
         }
     }
 
@@ -1994,13 +2017,15 @@ impl Database {
     /// If the value is now empty, it is removed.
     pub fn key_updated(&mut self, index: usize, key: &[u8]) {
         if self.config.active_rehashing {
-            self.data[index].rehash();
             self.data_expiration_ms[index].rehash();
             self.key_subscribers[index].rehash();
         }
 
-        let is_empty = match self.data[index].get(key) {
-            Some(v) => v.is_empty(),
+        let is_empty = match self.data[index]
+            .get(std::str::from_utf8(key).unwrap())
+            .unwrap()
+        {
+            Some(v) => bincode::deserialize_from::<_, Value>(v).unwrap().is_empty(),
             None => false,
         };
         if is_empty {
@@ -2213,10 +2238,8 @@ impl Database {
     }
 
     /// Iterate over the keys in one database
-    pub fn iter_db(&self, dbindex: usize) -> Iter {
-        Iter {
-            inner: self.data[dbindex].iter(),
-        }
+    pub fn iter_db(&self, _dbindex: usize) -> Iter {
+        unimplemented!()
     }
 
     /// Collect all keys from a database matching a pattern.

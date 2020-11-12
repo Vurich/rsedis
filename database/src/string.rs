@@ -229,7 +229,7 @@ impl ValueString {
         })
     }
 
-    pub fn pfmerge(&mut self, data: Vec<&ValueString>) -> Result<(), OperationError> {
+    pub fn pfmerge(&mut self, data: Vec<ValueString>) -> Result<(), OperationError> {
         let mut hll = if self.strlen() == 0 {
             HLL::new(HLL_ERROR)
         } else {

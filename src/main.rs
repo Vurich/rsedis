@@ -32,5 +32,6 @@ fn main() {
         println!("Port: {}", port);
         println!("PID: {}", getpid());
     }
+
     server.run();
 }

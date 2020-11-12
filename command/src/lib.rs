@@ -119,8 +119,10 @@ fn generic_set(
         return Ok(false);
     }
 
-    match db.get_or_create(dbindex, &key).set(val) {
-        Ok(_) => {
+    let res = db.get_or_create(dbindex, &key).set(val);
+
+    match res {
+        Ok(()) => {
             db.key_updated(dbindex, &key);
 
             if let Some(msexp) = expiration {
@@ -352,7 +354,7 @@ fn persist(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Res
     r
 }
 
-fn dbtype(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response {
+fn dbtype(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Response {
     validate_arguments_exact!(parser, 2);
     let key = try_validate!(parser.get_vec(1), "Invalid key");
 
@@ -378,7 +380,7 @@ fn append(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Resp
     let key = try_validate!(parser.get_vec(1), "Invalid key");
     let val = try_validate!(parser.get_vec(2), "Invalid value");
     let r = {
-        let oldval = db.get_or_create(dbindex, &key);
+        let mut oldval = db.get_or_create(dbindex, &key);
         let oldlen = match oldval.strlen() {
             Ok(len) => len,
             Err(err) => return Response::Error(err.to_string()),
@@ -396,7 +398,7 @@ fn append(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Resp
     r
 }
 
-fn generic_get(db: &Database, dbindex: usize, key: Vec<u8>, err_on_wrongtype: bool) -> Response {
+fn generic_get(db: &mut Database, dbindex: usize, key: Vec<u8>, err_on_wrongtype: bool) -> Response {
     let obj = db.get(dbindex, &key);
     match obj {
         Some(value) => match value.get() {
@@ -413,13 +415,13 @@ fn generic_get(db: &Database, dbindex: usize, key: Vec<u8>, err_on_wrongtype: bo
     }
 }
 
-fn get(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response {
+fn get(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Response {
     validate_arguments_exact!(parser, 2);
     let key = try_validate!(parser.get_vec(1), "Invalid key");
     generic_get(db, dbindex, key, true)
 }
 
-fn mget(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response {
+fn mget(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Response {
     validate!(parser.argv.len() >= 2, "Wrong number of parameters");
     let mut responses = Vec::with_capacity(parser.argv.len() - 1);
     for i in 1..parser.argv.len() {
@@ -429,7 +431,7 @@ fn mget(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response {
     Response::Array(responses)
 }
 
-fn getrange(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response {
+fn getrange(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Response {
     validate_arguments_exact!(parser, 4);
     let key = try_validate!(parser.get_vec(1), "Invalid key");
     let start = try_validate!(parser.get_i64(2), "Invalid range");
@@ -460,7 +462,7 @@ fn setrange(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Re
         if db.get(dbindex, &key).is_none() && value.is_empty() {
             return Response::Integer(0);
         }
-        let oldval = db.get_or_create(dbindex, &key);
+        let mut oldval = db.get_or_create(dbindex, &key);
         validate!(
             index + value.len() <= 512 * 1024 * 1024,
             "ERR string exceeds maximum allowed size (512MB)"
@@ -504,7 +506,7 @@ fn setbit(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Resp
     r
 }
 
-fn getbit(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response {
+fn getbit(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Response {
     validate_arguments_exact!(parser, 3);
     let key = try_validate!(parser.get_vec(1), "Invalid key");
     let index = try_validate!(parser.get_i64(2), "Invalid index");
@@ -518,7 +520,7 @@ fn getbit(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response
     }
 }
 
-fn strlen(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response {
+fn strlen(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Response {
     validate_arguments_exact!(parser, 2);
     let key = try_validate!(parser.get_vec(1), "Invalid key");
     let obj = db.get(dbindex, &key);
@@ -600,7 +602,7 @@ fn pfadd(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Respo
     r
 }
 
-fn pfcount(parser: &ParsedCommand, db: &Database, dbindex: usize) -> Response {
+fn pfcount(parser: &ParsedCommand, db: &mut Database, dbindex: usize) -> Response {
     validate_arguments_gte!(parser, 2);
     if parser.argv.len() == 2 {
         let key = try_validate!(parser.get_vec(1), "Invalid key");
@@ -655,7 +657,7 @@ fn pfmerge(parser: &ParsedCommand, db: &mut Database, dbindex: usize) -> Respons
     };
 
     {
-        let value = db.get_or_create(dbindex, &key);
+        let mut value = db.get_or_create(dbindex, &key);
         *value = val;
     }
     db.key_updated(dbindex, &key);
@@ -674,7 +676,7 @@ fn generic_push(
     let mut r = Response::Nil;
     for i in 2..parser.argv.len() {
         let val = try_validate!(parser.get_vec(i), "Invalid value");
-        let el;
+        let mut el;
         if create {
             el = db.get_or_create(dbindex, &key);
         } else {
@@ -718,7 +720,7 @@ fn generic_pop(
     let key = try_validate!(parser.get_vec(1), "Invalid key");
     let r = {
         match db.get_mut(dbindex, &key) {
-            Some(list) => match list.pop(right) {
+            Some(mut list) => match list.pop(right) {
                 Ok(el) => match el {
                     Some(val) => Response::Data(val),
                     None => Response::Nil,
@@ -751,7 +753,7 @@ fn generic_rpoplpush(
     }
 
     let el = {
-        let sourcelist = match db.get_mut(dbindex, source) {
+        let mut sourcelist = match db.get_mut(dbindex, source) {
             Some(sourcelist) => {
                 if sourcelist.llen().is_err() {
                     return Response::Error("WRONGTYPE Source is not a list".to_owned());
@@ -770,7 +772,7 @@ fn generic_rpoplpush(
     };
 
     let resp = {
-        let destinationlist = db.get_or_create(dbindex, destination);
+        let mut destinationlist = db.get_or_create(dbindex, destination);
         if let Err(e) = destinationlist.push(el.clone(), false) {
             return Response::Error(e.to_string());
         }
@@ -872,7 +874,7 @@ fn generic_bpop(
     for i in 1..parser.argv.len() - 1 {
         let key = try_opt_validate!(parser.get_vec(i), "Invalid key");
         let val = match db.get_mut(dbindex, &key) {
-            Some(list) => match list.pop(right) {
+            Some(mut list) => match list.pop(right) {
                 Ok(el) => el,
                 Err(err) => return Ok(Response::Error(err.to_string())),
             },
@@ -962,7 +964,7 @@ fn blpop(
     generic_bpop(parser, db, dbindex, false)
 }
 
-fn lindex(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response {
+fn lindex(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Response {
     validate_arguments_exact!(parser, 3);
     let key = try_validate!(parser.get_vec(1), "Invalid key");
     let index = try_validate!(parser.get_i64(2), "Invalid index");
@@ -992,7 +994,7 @@ fn linsert(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Res
         _ => return Response::Error("ERR syntax error".to_owned()),
     };
     let r = match db.get_mut(dbindex, &key) {
-        Some(el) => match el.linsert(before, pivot, value) {
+        Some(mut el) => match el.linsert(before, pivot, value) {
             Ok(r) => match r {
                 Some(listsize) => Response::Integer(listsize as i64),
                 None => Response::Integer(-1),
@@ -1005,7 +1007,7 @@ fn linsert(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Res
     r
 }
 
-fn llen(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response {
+fn llen(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Response {
     validate_arguments_exact!(parser, 2);
     let key = try_validate!(parser.get_vec(1), "Invalid key");
 
@@ -1018,7 +1020,7 @@ fn llen(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response {
     }
 }
 
-fn lrange(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response {
+fn lrange(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Response {
     validate_arguments_exact!(parser, 4);
     let key = try_validate!(parser.get_vec(1), "Invalid key");
     let start = try_validate!(parser.get_i64(2), "Invalid range");
@@ -1041,7 +1043,7 @@ fn lrem(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Respon
     let count = try_validate!(parser.get_i64(2), "Invalid count");
     let value = try_validate!(parser.get_vec(3), "Invalid value");
     let r = match db.get_mut(dbindex, &key) {
-        Some(el) => match el.lrem(count < 0, count.abs() as usize, value) {
+        Some(mut el) => match el.lrem(count < 0, count.abs() as usize, value) {
             Ok(removed) => Response::Integer(removed as i64),
             Err(err) => Response::Error(err.to_string()),
         },
@@ -1057,7 +1059,7 @@ fn lset(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Respon
     let index = try_validate!(parser.get_i64(2), "Invalid index");
     let value = try_validate!(parser.get_vec(3), "Invalid value");
     let r = match db.get_mut(dbindex, &key) {
-        Some(el) => match el.lset(index, value) {
+        Some(mut el) => match el.lset(index, value) {
             Ok(()) => Response::Status("OK".to_owned()),
             Err(err) => Response::Error(err.to_string()),
         },
@@ -1073,7 +1075,7 @@ fn ltrim(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Respo
     let start = try_validate!(parser.get_i64(2), "Invalid start");
     let stop = try_validate!(parser.get_i64(3), "Invalid stop");
     let r = match db.get_mut(dbindex, &key) {
-        Some(el) => match el.ltrim(start, stop) {
+        Some(mut el) => match el.ltrim(start, stop) {
             Ok(()) => Response::Status("OK".to_owned()),
             Err(err) => Response::Error(err.to_string()),
         },
@@ -1089,7 +1091,7 @@ fn sadd(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Respon
     let mut count = 0;
     let set_max_intset_entries = db.config.set_max_intset_entries;
     {
-        let el = db.get_or_create(dbindex, &key);
+        let mut el = db.get_or_create(dbindex, &key);
         for i in 2..parser.argv.len() {
             let val = try_validate!(parser.get_vec(i), "Invalid value");
             match el.sadd(val, set_max_intset_entries) {
@@ -1112,7 +1114,7 @@ fn srem(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Respon
     let key = try_validate!(parser.get_vec(1), "Invalid key");
     let mut count = 0;
     {
-        let el = db.get_or_create(dbindex, &key);
+        let mut el = db.get_or_create(dbindex, &key);
         for i in 2..parser.argv.len() {
             let val = try_validate!(parser.get_vec(i), "Invalid value");
             match el.srem(&val) {
@@ -1130,7 +1132,7 @@ fn srem(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Respon
     Response::Integer(count)
 }
 
-fn sismember(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response {
+fn sismember(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Response {
     validate_arguments_exact!(parser, 3);
     let key = try_validate!(parser.get_vec(1), "Invalid key");
     let member = try_validate!(parser.get_vec(2), "Invalid key");
@@ -1150,7 +1152,7 @@ fn sismember(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Respo
     })
 }
 
-fn srandmember(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response {
+fn srandmember(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Response {
     validate_arguments_gte!(parser, 2);
     validate_arguments_lte!(parser, 3);
     let key = try_validate!(parser.get_vec(1), "Invalid key");
@@ -1196,7 +1198,7 @@ fn srandmember(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Res
     }
 }
 
-fn smembers(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response {
+fn smembers(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Response {
     validate_arguments_exact!(parser, 2);
     let key = try_validate!(parser.get_vec(1), "Invalid key");
     let value = match db.get(dbindex, &key) {
@@ -1218,7 +1220,7 @@ fn spop(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Respon
     validate_arguments_lte!(parser, 3);
     let key = try_validate!(parser.get_vec(1), "Invalid key");
     let r = {
-        let value = match db.get_mut(dbindex, &key) {
+        let mut value = match db.get_mut(dbindex, &key) {
             Some(el) => el,
             None => {
                 return if parser.argv.len() == 2 {
@@ -1273,7 +1275,7 @@ fn smove(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Respo
         }
     }
     {
-        let source = match db.get_mut(dbindex, &source_key) {
+        let mut source = match db.get_mut(dbindex, &source_key) {
             Some(s) => s,
             None => return Response::Integer(0),
         };
@@ -1290,7 +1292,7 @@ fn smove(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Respo
 
     let set_max_intset_entries = db.config.set_max_intset_entries;
     {
-        let destination = db.get_or_create(dbindex, &destination_key);
+        let mut destination = db.get_or_create(dbindex, &destination_key);
         match destination.sadd(member, set_max_intset_entries) {
             Ok(_) => (),
             Err(err) => panic!("Unexpected failure {}", err.to_string()),
@@ -1303,7 +1305,7 @@ fn smove(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Respo
     Response::Integer(1)
 }
 
-fn scard(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response {
+fn scard(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Response {
     validate_arguments_exact!(parser, 2);
     let key = try_validate!(parser.get_vec(1), "Invalid key");
     let el = match db.get(dbindex, &key) {
@@ -1317,14 +1319,13 @@ fn scard(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response 
     }
 }
 
-fn sdiff(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response {
+fn sdiff(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Response {
     let key = try_validate!(parser.get_vec(1), "Invalid key");
     let el = match db.get(dbindex, &key) {
         Some(e) => e,
         None => return Response::Array(vec![]),
     };
-    let nil = Value::Nil;
-    let sets = get_values!(2, parser.argv.len(), parser, db, dbindex, &nil);
+    let sets = get_values!(2, parser.argv.len(), parser, db, dbindex, Value::Nil);
 
     match el.sdiff(&sets) {
         Ok(set) => Response::Array(
@@ -1345,8 +1346,7 @@ fn sdiffstore(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> 
             Some(e) => e,
             None => return Response::Integer(0),
         };
-        let nil = Value::Nil;
-        let sets = get_values!(3, parser.argv.len(), parser, db, dbindex, &nil);
+        let sets = get_values!(3, parser.argv.len(), parser, db, dbindex, Value::Nil);
         match el.sdiff(&sets) {
             Ok(set) => set,
             Err(err) => return Response::Error(err.to_string()),
@@ -1360,14 +1360,13 @@ fn sdiffstore(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> 
     Response::Integer(r)
 }
 
-fn sinter(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response {
+fn sinter(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Response {
     let key = try_validate!(parser.get_vec(1), "Invalid key");
     let el = match db.get(dbindex, &key) {
         Some(e) => e,
         None => return Response::Array(vec![]),
     };
-    let nil = Value::Nil;
-    let sets = get_values!(2, parser.argv.len(), parser, db, dbindex, &nil);
+    let sets = get_values!(2, parser.argv.len(), parser, db, dbindex, Value::Nil);
     match el.sinter(&sets) {
         Ok(set) => Response::Array(
             set.iter()
@@ -1383,12 +1382,8 @@ fn sinterstore(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) ->
     let destination_key = try_validate!(parser.get_vec(1), "Invalid destination");
     let set = {
         let key = try_validate!(parser.get_vec(2), "Invalid key");
-        let nil = Value::Nil;
-        let el = match db.get(dbindex, &key) {
-            Some(e) => e,
-            None => &nil,
-        };
-        let sets = get_values!(3, parser.argv.len(), parser, db, dbindex, &nil);
+        let el = db.get(dbindex, &key).unwrap_or_default();
+        let sets = get_values!(3, parser.argv.len(), parser, db, dbindex, Value::Nil);
         match el.sinter(&sets) {
             Ok(set) => set,
             Err(err) => return Response::Error(err.to_string()),
@@ -1402,15 +1397,10 @@ fn sinterstore(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) ->
     Response::Integer(r)
 }
 
-fn sunion(parser: &mut ParsedCommand, db: &Database, dbindex: usize) -> Response {
+fn sunion(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Response {
     let key = try_validate!(parser.get_vec(1), "Invalid key");
-    let defaultel = Value::Nil;
-    let el = match db.get(dbindex, &key) {
-        Some(e) => e,
-        None => &defaultel,
-    };
-    let nil = Value::Nil;
-    let sets = get_values!(2, parser.argv.len(), parser, db, dbindex, &nil);
+    let el = db.get(dbindex, &key).unwrap_or_default();
+    let sets = get_values!(2, parser.argv.len(), parser, db, dbindex, Value::Nil);
 
     match el.sunion(&sets) {
         Ok(set) => Response::Array(
@@ -1430,10 +1420,9 @@ fn sunionstore(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) ->
         let defaultel = Value::Nil;
         let el = match db.get(dbindex, &key) {
             Some(e) => e,
-            None => &defaultel,
+            None => defaultel,
         };
-        let nil = Value::Nil;
-        let sets = get_values!(3, parser.argv.len(), parser, db, dbindex, &nil);
+        let sets = get_values!(3, parser.argv.len(), parser, db, dbindex, Value::Nil);
         match el.sunion(&sets) {
             Ok(set) => set,
             Err(err) => return Response::Error(err.to_string()),
@@ -1496,7 +1485,7 @@ fn zadd(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Respon
         );
     }
     {
-        let el = db.get_or_create(dbindex, &key);
+        let mut el = db.get_or_create(dbindex, &key);
         for _ in 0..((len - i) / 2) {
             let score = parser.get_f64(i).unwrap();
             let val = try_validate!(parser.get_vec(i + 1), "Invalid value");
@@ -1554,7 +1543,7 @@ fn zincrby(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Res
     validate_arguments_exact!(parser, 4);
     let key = try_validate!(parser.get_vec(1), "Invalid key");
     let newscore = {
-        let el = db.get_or_create(dbindex, &key);
+        let mut el = db.get_or_create(dbindex, &key);
         let score = try_validate!(parser.get_f64(2), "ERR value is not a valid float");
         let member = try_validate!(parser.get_vec(3), "Invalid member");
         match el.zincrby(score, member) {
@@ -1572,7 +1561,7 @@ fn zrem(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Respon
     let key = try_validate!(parser.get_vec(1), "Invalid key");
     let mut count = 0;
     {
-        let el = match db.get_mut(dbindex, &key) {
+        let mut el = match db.get_mut(dbindex, &key) {
             Some(el) => el,
             None => return Response::Integer(0),
         };
@@ -1601,7 +1590,7 @@ fn zremrangebyscore(parser: &mut ParsedCommand, db: &mut Database, dbindex: usiz
     let min = try_validate!(parser.get_f64_bound(2), "ERR min or max is not a float");
     let max = try_validate!(parser.get_f64_bound(3), "ERR min or max is not a float");
     let c = {
-        let el = match db.get_mut(dbindex, &key) {
+        let mut el = match db.get_mut(dbindex, &key) {
             Some(e) => e,
             None => return Response::Integer(0),
         };
@@ -1640,7 +1629,7 @@ fn zremrangebylex(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize)
         }
     };
     let c = {
-        let el = match db.get_mut(dbindex, &key) {
+        let mut el = match db.get_mut(dbindex, &key) {
             Some(e) => e,
             None => return Response::Integer(0),
         };
@@ -1661,7 +1650,7 @@ fn zremrangebyrank(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize
     let start = try_validate!(parser.get_i64(2), "Invalid start");
     let stop = try_validate!(parser.get_i64(3), "Invalid stop");
     let c = {
-        let el = match db.get_mut(dbindex, &key) {
+        let mut el = match db.get_mut(dbindex, &key) {
             Some(e) => e,
             None => return Response::Integer(0),
         };
@@ -1970,8 +1959,7 @@ fn zinter_union_store(
             }
             n as usize
         };
-        let nil = Value::Nil;
-        let zsets = get_values!(3, 3 + numkeys, parser, db, dbindex, &nil);
+        let zsets = get_values!(3, 3 + numkeys, parser, db, dbindex, Value::Nil);
         let mut pos = 3 + numkeys;
         let mut weights = None;
         let mut aggregate = zset::Aggregate::Sum;
@@ -2231,7 +2219,7 @@ const BITS: usize = 32;
 #[cfg(all(target_pointer_width = "64"))]
 const BITS: usize = 64;
 
-fn info(parser: &mut ParsedCommand, db: &Database) -> Response {
+fn info(parser: &mut ParsedCommand, db: &mut Database) -> Response {
     validate_arguments_lte!(parser, 2);
     let section = &*(if parser.argv.len() == 1 {
         "default".to_owned()
@@ -2927,12 +2915,12 @@ mod test_command {
     use std::sync::{Arc, Mutex};
     use std::thread;
 
-    use config::Config;
-    use database::{Database, Value};
-    use logger::{Level, Logger};
-    use parser::{Argument, ParsedCommand};
-    use response::{Response, ResponseError};
-    use util::mstime;
+    use jigawatt_config::Config;
+    use jigawatt_database::{Database, Value};
+    use jigawatt_logger::{Level, Logger};
+    use jigawatt_parser::{Argument, ParsedCommand};
+    use jigawatt_response::{Response, ResponseError};
+    use jigawatt_util::mstime;
 
     use super::{command, Client};
     use std::time::Duration;
