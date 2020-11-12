@@ -1,6 +1,3 @@
-#[cfg(unix)]
-extern crate syslog;
-
 use std::fmt::{Debug, Error, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io;

@@ -2,6 +2,7 @@
 authors = ["Sebastian Waisbrot <seppo0010@gmail.com>"]
 name = "database"
 version = "0.1.0"
+edition = "2018"
 
 [dependencies]
 crc64 = "0.2"

@@ -101,10 +101,7 @@ impl From<ParseFloatError> for ParseError {
 
 impl OwnedParsedCommand {
     pub fn new(data: Vec<u8>, argv: Vec<Argument>) -> Self {
-        OwnedParsedCommand {
-            data,
-            argv,
-        }
+        OwnedParsedCommand { data, argv }
     }
 
     pub fn get_command(&self) -> ParsedCommand {
@@ -513,7 +510,7 @@ mod test_parser {
         {
             let message = b"*2\r\n$3\r\nfoo\r\n$4\r\nbarz\r\n";
             parser.written += message.len();
-            let mut v = parser.get_mut();
+            let v = parser.get_mut();
             v.extend(&*message.to_vec());
         }
         {
@@ -544,7 +541,7 @@ mod test_parser {
         {
             let message = b"\r\n\r\n*1\r\n$3\r\nfoo\r\n";
             parser.written += message.len();
-            let mut v = parser.get_mut();
+            let v = parser.get_mut();
             v.extend(&*message.to_vec());
         }
 
@@ -562,7 +559,7 @@ mod test_parser {
             let message = b"*2\r\n$3\r\nfoo\r\n$4\r\nbarz\r\n";
             parser.written += message.len();
             parser.written += message.len();
-            let mut v = parser.get_mut();
+            let v = parser.get_mut();
             v.extend(&*message.to_vec());
             v.extend(&*message.to_vec());
         }
@@ -577,13 +574,13 @@ mod test_parser {
         let message = b"*2\r\n$3\r\nfoo\r\n$4\r\nbarz\r\n";
         {
             parser.written += message.len();
-            let mut v = parser.get_mut();
+            let v = parser.get_mut();
             v.extend(&*message.to_vec());
         }
         parser.next().unwrap();
         {
             parser.written += message.len();
-            let mut v = parser.get_mut();
+            let v = parser.get_mut();
             v.extend(&*message.to_vec());
         }
         parser.next().unwrap();
@@ -596,7 +593,7 @@ mod test_parser {
         let message = b"*2\r\n$3\r\n\x01\x00\x08\r\n$4\r\n\xffarz\r\n";
         {
             parser.written += message.len();
-            let mut v = parser.get_mut();
+            let v = parser.get_mut();
             v.extend(&*message.to_vec());
         }
         assert_eq!(

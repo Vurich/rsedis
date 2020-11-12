@@ -5,8 +5,6 @@ use database::Database;
 use logger::Level;
 use parser::{ParseError, Parser};
 
-use crate::command;
-
 const UNEXPECTED_END: &str =
     "Unexpected end of file reading the append only file. You can: 1) Make a backup of your AOF \
      file, then use ./redis-check-aof --fix <filename>. 2) Alternatively you can set the \
@@ -15,7 +13,7 @@ const UNEXPECTED_END: &str =
 pub fn load(db: &mut Database) {
     let mut aof = db.aof.take().unwrap();
     db.loading = true;
-    let mut client = command::Client::new(channel().0, 0);
+    let mut client = crate::Client::new(channel().0, 0);
     let mut parser = Parser::new();
     loop {
         if parser.is_incomplete() {
@@ -64,7 +62,7 @@ pub fn load(db: &mut Database) {
             }
         };
 
-        command::command(parsed_command, db, &mut client).unwrap();
+        crate::command(parsed_command, db, &mut client).unwrap();
     }
     if client.multi && !db.config.aof_load_truncated {
         logger::log_and_exit!(db.config.logger, Warning, 1, "{}", UNEXPECTED_END);

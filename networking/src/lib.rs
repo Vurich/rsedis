@@ -730,6 +730,8 @@ mod test_networking {
 
     #[test]
     fn allow_multiple_clients() {
+        use std::sync::atomic::Ordering;
+
         let port = 16382;
         let mut server = Server::new(Config::default(port, Logger::new(Level::Warning)));
         server.start();
@@ -737,10 +739,12 @@ mod test_networking {
         let addr = format!("127.0.0.1:{}", port);
         let _ = TcpStream::connect(&*addr);
         thread::sleep(Duration::from_millis(100));
-        assert_eq!(*server.next_id.lock().unwrap(), 1);
+
+        assert_eq!(server.next_id.load(Ordering::Relaxed), 1);
+
         let _ = TcpStream::connect(&*addr);
         thread::sleep(Duration::from_millis(100));
-        assert_eq!(*server.next_id.lock().unwrap(), 2);
+        assert_eq!(server.next_id.load(Ordering::Relaxed), 2);
         server.stop();
     }
 }

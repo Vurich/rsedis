@@ -2,9 +2,8 @@ use std::collections::LinkedList;
 use std::io;
 use std::io::Write;
 
-use dbutil::normalize_position;
-use error::OperationError;
-use rdbutil::constants::*;
+use crate::{dbutil::normalize_position, error::OperationError};
+use rdbutil::constants::{TYPE_LIST, VERSION};
 use rdbutil::{encode_len, encode_slice_u8};
 
 #[derive(PartialEq, Debug, Clone)]

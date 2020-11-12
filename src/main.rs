@@ -3,7 +3,7 @@ pub mod release;
 use std::env::args;
 use std::process::exit;
 
-use crate::release::*;
+use crate::release::{GIT_DIRTY, GIT_SHA1, RUSTC_VERSION};
 use compat::getpid;
 use config::Config;
 use logger::{Level, Logger};

@@ -1,6 +1,6 @@
 use std::str::from_utf8;
 
-use error::OperationError;
+use crate::error::OperationError;
 
 /// Gets the position in a list from a signed integer
 /// Redis uses this logic to start counting from the end using negative numbers.

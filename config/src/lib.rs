@@ -254,7 +254,8 @@ impl From<Utf8Error> for ConfigError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::Config;
+
     use std::collections::HashMap;
     use std::fs::create_dir;
     use std::fs::File;

@@ -2,10 +2,10 @@ use std::io;
 use std::io::Write;
 use std::str;
 
+use crate::{dbutil::normalize_position, error::OperationError};
+
 use basichll::HLL;
-use dbutil::normalize_position;
-use error::OperationError;
-use rdbutil::constants::*;
+use rdbutil::constants::{TYPE_STRING, VERSION};
 use rdbutil::{encode_i64, encode_slice_u8, EncodeError};
 
 const HLL_ERROR: f64 = 0.0019;

@@ -2,9 +2,9 @@ use std::collections::HashSet;
 use std::io;
 use std::io::Write;
 
-use dbutil::usize_to_vec;
-use dbutil::vec_to_usize;
-use rdbutil::constants::*;
+use crate::dbutil::{usize_to_vec, vec_to_usize};
+
+use rdbutil::constants::{TYPE_SET, TYPE_SET_INTSET, VERSION};
 use rdbutil::{encode_len, encode_slice_u8, EncodeError};
 use rdbutil::{encode_u16_to_slice_u8, encode_u32_to_slice_u8, encode_u64_to_slice_u8};
 

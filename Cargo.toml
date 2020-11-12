@@ -10,8 +10,20 @@ exclude = [
 build = "build.rs"
 edition = "2018"
 
-[[bin]]
+[workspace]
+members = [
+    "config",
+    "util",
+    "parser",
+    "response",
+    "database",
+    "command",
+    "networking",
+    "logger",
+    "compat",
+]
 
+[[bin]]
 name = "rsedis"
 doc = false
 

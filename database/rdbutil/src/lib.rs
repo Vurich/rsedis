@@ -10,8 +10,6 @@ use std::usize;
 
 use util::htonl;
 
-use constants::*;
-
 #[derive(Debug)]
 pub enum EncodeError {
     IOError(io::Error),
@@ -39,6 +37,8 @@ impl From<EncodeError> for io::Error {
 // numbers.
 // For now, the caller will have to explicitely cast or implement a wrapper function
 pub fn encode_i64<W: io::Write>(value: i64, enc: &mut W) -> Result<(), EncodeError> {
+    use constants::{ENCVAL, ENC_INT16, ENC_INT32, ENC_INT8};
+
     Ok(if value >= -(1 << 7) && value < 1 << 7 {
         enc.write_all(&[(ENCVAL << 6) | ENC_INT8, (value & 0xFF) as u8])
     } else if value >= -(1 << 15) && value < 1 << 15 {
@@ -119,6 +119,8 @@ pub fn encode_u64_to_slice_u8<W: io::Write>(value: u64, enc: &mut W) -> Result<(
 }
 
 pub fn encode_len<W: io::Write>(len: usize, enc: &mut W) -> Result<(), EncodeError> {
+    use constants::{BITLEN14, BITLEN32, BITLEN6};
+
     if len > u32::MAX as usize {
         panic!("Length does not fit in four bytes");
     }
@@ -158,62 +160,67 @@ pub fn encode_slice_u8<W: io::Write>(
     Ok(())
 }
 
-#[test]
-fn test_encode_i64() {
-    let mut v = vec![];
-    assert_eq!(encode_i64(1, &mut v).unwrap(), 2);
-    assert_eq!(v, vec![192, 1]);
-}
+#[cfg(test)]
+mod tests {
+    use super::{encode_i64, encode_slice_u8, encode_usize, EncodeError};
 
-#[test]
-fn test_encode_i64_2bytes() {
-    let mut v = vec![];
-    assert_eq!(encode_i64(260, &mut v).unwrap(), 3);
-    assert_eq!(v, b"\xc1\x04\x01");
-}
-
-#[test]
-fn test_encode_i64_4bytes() {
-    let mut v = vec![];
-    assert_eq!(encode_i64(70000, &mut v).unwrap(), 5);
-    assert_eq!(v, b"\xc2p\x11\x01\x00");
-}
-
-#[test]
-fn test_encode_i64_overflow() {
-    let mut v = vec![];
-    match encode_usize(usize::MAX, &mut v).unwrap_err() {
-        EncodeError::OverflowError => (),
-        _ => panic!("Unexpected error"),
+    #[test]
+    fn test_encode_i64() {
+        let mut v = vec![];
+        encode_i64(1, &mut v).unwrap();
+        assert_eq!(v, vec![192, 1]);
     }
-}
 
-#[test]
-fn test_encode_usize() {
-    let mut v = vec![];
-    assert_eq!(encode_usize(123, &mut v).unwrap(), 2);
-    assert_eq!(v, vec![192, 123]);
-}
-
-#[test]
-fn test_encode_usize_overflow() {
-    let mut v = vec![];
-    match encode_usize(usize::MAX, &mut v).unwrap_err() {
-        EncodeError::OverflowError => (),
-        _ => panic!("Unexpected error"),
+    #[test]
+    fn test_encode_i64_2bytes() {
+        let mut v = vec![];
+        encode_i64(260, &mut v).unwrap();
+        assert_eq!(v, b"\xc1\x04\x01");
     }
-}
 
-#[test]
-fn test_encode_slice_u8_integer() {
-    let mut v = vec![];
-    assert_eq!(encode_slice_u8(b"1", &mut v, true).unwrap(), 2);
-    assert_eq!(v, vec![192, 1]);
-}
+    #[test]
+    fn test_encode_i64_4bytes() {
+        let mut v = vec![];
+        encode_i64(70000, &mut v).unwrap();
+        assert_eq!(v, b"\xc2p\x11\x01\x00");
+    }
 
-#[test]
-fn test_encode_slice_u8_data() {
-    let mut v = vec![];
-    assert_eq!(encode_slice_u8(b"hello world", &mut v, true).unwrap(), 12);
-    assert_eq!(v, b"\x0bhello world");
+    #[test]
+    fn test_encode_i64_overflow() {
+        let mut v = vec![];
+        match encode_usize(usize::MAX, &mut v).unwrap_err() {
+            EncodeError::OverflowError => (),
+            _ => panic!("Unexpected error"),
+        }
+    }
+
+    #[test]
+    fn test_encode_usize() {
+        let mut v = vec![];
+        encode_usize(123, &mut v).unwrap();
+        assert_eq!(v, vec![192, 123]);
+    }
+
+    #[test]
+    fn test_encode_usize_overflow() {
+        let mut v = vec![];
+        match encode_usize(usize::MAX, &mut v).unwrap_err() {
+            EncodeError::OverflowError => (),
+            _ => panic!("Unexpected error"),
+        }
+    }
+
+    #[test]
+    fn test_encode_slice_u8_integer() {
+        let mut v = vec![];
+        encode_slice_u8(b"1", &mut v, true).unwrap();
+        assert_eq!(v, vec![192, 1]);
+    }
+
+    #[test]
+    fn test_encode_slice_u8_data() {
+        let mut v = vec![];
+        encode_slice_u8(b"hello world", &mut v, true).unwrap();
+        assert_eq!(v, b"\x0bhello world");
+    }
 }

@@ -1,17 +1,3 @@
-extern crate basichll;
-extern crate config;
-#[macro_use(log)]
-extern crate logger;
-extern crate crc64;
-extern crate parser;
-extern crate persistence;
-extern crate rand;
-extern crate rdbutil;
-extern crate rehashinghashmap;
-extern crate response;
-extern crate skiplist;
-extern crate util;
-
 pub mod dbutil;
 pub mod error;
 pub mod list;
@@ -38,12 +24,12 @@ use rehashinghashmap::RehashingHashMap;
 use response::Response;
 use util::{get_random_hex_chars, glob_match, mstime};
 
-use error::OperationError;
-use list::ValueList;
 use rdbutil::encode_u64_to_slice_u8;
-use set::ValueSet;
-use string::ValueString;
-use zset::ValueSortedSet;
+
+use crate::{
+    error::OperationError, list::ValueList, set::ValueSet, string::ValueString,
+    zset::ValueSortedSet,
+};
 
 const ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP: usize = 20;
 
@@ -2310,7 +2296,7 @@ impl Database {
             let mut err = false;
             if let Some(w) = &mut self.aof {
                 if let Err(e) = w.write(dbindex, command) {
-                    log!(
+                    logger::log!(
                         self.config.logger,
                         Warning,
                         "Error writing aof {:?}; stopped writing",
@@ -2334,15 +2320,12 @@ mod test_command {
     use std::sync::mpsc::channel;
     use std::usize;
 
-    use util::mstime;
-
     use config::Config;
-    use list::ValueList;
     use logger::{Level, Logger};
-    use set::ValueSet;
-    use string::ValueString;
-    use zset;
+    use util::mstime;
     use zset::ValueSortedSet;
+
+    use crate::{list::ValueList, set::ValueSet, string::ValueString, zset};
 
     use super::{Database, PubsubEvent, Value};
     use parser::{Argument, ParsedCommand};
