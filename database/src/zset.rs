@@ -323,16 +323,20 @@ impl ValueSortedSet {
 
         for _ in 0..count {
             let mut i = 0;
+
             let el = skiplist
-                .drain_filter(|v| {
+                .drain_filter(|_| {
                     let out = i == pos;
                     i += 1;
                     out
                 })
-                .next()
-                .unwrap();
-            hmap.remove(&el.s);
+                .next();
+
+            if let Some(el) = el {
+                hmap.remove(&el.s);
+            }
         }
+
         count
     }
 
@@ -350,14 +354,16 @@ impl ValueSortedSet {
         for _ in 0..count {
             let mut i = 0;
             let el = skiplist
-                .drain_filter(|v| {
+                .drain_filter(|_| {
                     let out = i == pos;
                     i += 1;
                     out
                 })
-                .next()
-                .unwrap();
-            hmap.remove(&el.s);
+                .next();
+
+            if let Some(el) = el {
+                hmap.remove(&el.s);
+            }
         }
         count
     }
@@ -430,14 +436,16 @@ impl ValueSortedSet {
         for _ in 0..(stop - start + 1) {
             let mut i = 0;
             let el = skiplist
-                .drain_filter(|v| {
+                .drain_filter(|_| {
                     let out = i == start;
                     i += 1;
                     out
                 })
-                .next()
-                .unwrap();
-            hmap.remove(&el.s);
+                .next();
+
+            if let Some(el) = el {
+                hmap.remove(&el.s);
+            }
         }
         stop - start + 1
     }
@@ -503,8 +511,7 @@ impl ValueSortedSet {
                     (m1, m2)
                 }
             }
-            (_, Bound::Unbounded) => (m1, m2),
-            (Bound::Unbounded, _) => (m2, m1),
+            _ => (m1, m2),
         };
 
         let mut r = vec![];
