@@ -1,3 +1,5 @@
+#![feature(btree_drain_filter, map_first_last)]
+
 pub mod dbutil;
 pub mod error;
 pub mod list;
@@ -38,11 +40,11 @@ use crate::{
 const ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP: usize = 20;
 
 /// Any value storable in the database
-#[derive(PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub enum Value {
+    String(ValueString),
     /// Nil should not be stored, but it is used as a default for initialized values
     Nil,
-    String(ValueString),
     List(ValueList),
     Set(ValueSet),
     SortedSet(ValueSortedSet),
@@ -790,13 +792,13 @@ impl Value {
     /// use database::Value;
     ///
     /// let mut val = Value::Nil;
-    /// assert_eq!(val.srem(&vec![0]).unwrap(), false);
+    /// assert_eq!(val.srem(&[0]).unwrap(), false);
     /// val.sadd(vec![1], 3).unwrap();
     /// val.sadd(vec![2], 3).unwrap();
     /// val.sadd(vec![3], 3).unwrap();
-    /// assert_eq!(val.srem(&vec![3]).unwrap(), true);
-    /// assert_eq!(val.srem(&vec![3]).unwrap(), false);
-    /// assert_eq!(val.srem(&vec![4]).unwrap(), false);
+    /// assert_eq!(val.srem(&[3]).unwrap(), true);
+    /// assert_eq!(val.srem(&[3]).unwrap(), false);
+    /// assert_eq!(val.srem(&[4]).unwrap(), false);
     /// ```
     pub fn srem(&mut self, el: &[u8]) -> Result<bool, OperationError> {
         match self {
@@ -813,12 +815,12 @@ impl Value {
     /// use database::Value;
     ///
     /// let mut val = Value::Nil;
-    /// assert_eq!(val.sismember(&vec![0]).unwrap(), false);
+    /// assert_eq!(val.sismember(&[0]).unwrap(), false);
     /// val.sadd(vec![1], 3).unwrap();
     /// val.sadd(vec![2], 3).unwrap();
     /// val.sadd(vec![3], 3).unwrap();
-    /// assert_eq!(val.sismember(&vec![1]).unwrap(), true);
-    /// assert_eq!(val.sismember(&vec![4]).unwrap(), false);
+    /// assert_eq!(val.sismember(&[1]).unwrap(), true);
+    /// assert_eq!(val.sismember(&[4]).unwrap(), false);
     /// ```
     pub fn sismember(&self, el: &[u8]) -> Result<bool, OperationError> {
         match self {
@@ -958,7 +960,7 @@ impl Value {
     /// let mut val3 = Value::Nil;
     /// val3.sadd(vec![2], 3).unwrap();
     /// let set = vec![vec![3]].into_iter().collect::<HashSet<_>>();
-    /// assert_eq!(val1.sdiff(&vec![&val2, &val3]).unwrap(), set);
+    /// assert_eq!(val1.sdiff(&[&val2, &val3]).unwrap(), set);
     /// ```
     pub fn sdiff(&self, set_values: &[Value]) -> Result<HashSet<Vec<u8>>, OperationError> {
         match self {
@@ -990,7 +992,7 @@ impl Value {
     /// val3.sadd(vec![1], 3).unwrap();
     /// val3.sadd(vec![3], 3).unwrap();
     /// let set = vec![vec![1]].into_iter().collect::<HashSet<_>>();
-    /// assert_eq!(val1.sinter(&vec![&val2, &val3]).unwrap(), set);
+    /// assert_eq!(val1.sinter(&[&val2, &val3]).unwrap(), set);
     /// ```
     pub fn sinter(&self, set_values: &[Value]) -> Result<HashSet<Vec<u8>>, OperationError> {
         match self {
@@ -1020,7 +1022,7 @@ impl Value {
     /// val3.sadd(vec![1], 3).unwrap();
     /// val3.sadd(vec![3], 3).unwrap();
     /// let set = vec![vec![1], vec![2], vec![3]].into_iter().collect::<HashSet<_>>();
-    /// assert_eq!(val1.sunion(&vec![&val2, &val3]).unwrap(), set);
+    /// assert_eq!(val1.sunion(&[&val2, &val3]).unwrap(), set);
     /// ```
     pub fn sunion(&self, set_values: &[Value]) -> Result<HashSet<Vec<u8>>, OperationError> {
         let emptyset = ValueSet::new();
@@ -1511,7 +1513,7 @@ impl Value {
     /// val3.zadd(1.3, vec![1], false, false, false, false).unwrap();
     /// val3.zadd(3.3, vec![3], false, false, false, false).unwrap();
     /// let mut val4 = Value::Nil;
-    /// val4 = val4.zunion(&vec![&val1, &val2, &val3], None, zset::Aggregate::Sum).unwrap();
+    /// val4 = val4.zunion(&[&val1, &val2, &val3], None, zset::Aggregate::Sum).unwrap();
     /// assert_eq!(val4.zcard().unwrap(), 3);
     /// assert!(((val4.zscore(vec![1]).unwrap().unwrap() - 3.6)).abs() < 0.01);
     /// assert!(((val4.zscore(vec![2]).unwrap().unwrap() - 2.2)).abs() < 0.01);
@@ -1532,7 +1534,7 @@ impl Value {
     /// val3.zadd(1.3, vec![1], false, false, false, false).unwrap();
     /// val3.zadd(3.3, vec![3], false, false, false, false).unwrap();
     /// let mut val4 = Value::Nil;
-    /// val4 = val4.zunion(&vec![&val1, &val2, &val3], Some(vec![1.0, 2.0, 3.0]), zset::Aggregate::Min).unwrap();
+    /// val4 = val4.zunion(&[&val1, &val2, &val3], Some(vec![1.0, 2.0, 3.0]), zset::Aggregate::Min).unwrap();
     /// assert_eq!(val4.zcard().unwrap(), 3);
     /// assert!(((val4.zscore(vec![1]).unwrap().unwrap() - 1.1)).abs() < 0.01);
     /// assert!(((val4.zscore(vec![2]).unwrap().unwrap() - 4.4)).abs() < 0.01);
@@ -1568,7 +1570,7 @@ impl Value {
     /// val3.zadd(1.3, vec![1], false, false, false, false).unwrap();
     /// val3.zadd(3.3, vec![3], false, false, false, false).unwrap();
     /// let mut val4 = Value::Nil;
-    /// val4 = val4.zinter(&vec![&val1, &val2, &val3], None, zset::Aggregate::Sum).unwrap();
+    /// val4 = val4.zinter(&[&val1, &val2, &val3], None, zset::Aggregate::Sum).unwrap();
     /// assert_eq!(val4.zcard().unwrap(), 1);
     /// assert!(((val4.zscore(vec![1]).unwrap().unwrap() - 3.6)).abs() < 0.01);
     /// ```
@@ -1587,7 +1589,7 @@ impl Value {
     /// val3.zadd(1.3, vec![1], false, false, false, false).unwrap();
     /// val3.zadd(3.3, vec![3], false, false, false, false).unwrap();
     /// let mut val4 = Value::Nil;
-    /// val4 = val4.zinter(&vec![&val1, &val2, &val3], Some(vec![1.0, 2.0, 3.0]), zset::Aggregate::Min).unwrap();
+    /// val4 = val4.zinter(&[&val1, &val2, &val3], Some(vec![1.0, 2.0, 3.0]), zset::Aggregate::Min).unwrap();
     /// assert_eq!(val4.zcard().unwrap(), 1);
     /// assert!(((val4.zscore(vec![1]).unwrap().unwrap() - 1.1)).abs() < 0.01);
     /// ```
@@ -1730,23 +1732,7 @@ impl<'a> Drop for ValueRef<'a> {
                 &bincode::serialize(&self.value).unwrap(),
             )
             .unwrap();
-    }
-}
-
-pub struct Iter<'a> {
-    inner: rehashinghashmap::Iter<'a, Vec<u8>, Value>,
-}
-
-impl<'a> Iterator for Iter<'a> {
-    type Item = (&'a Vec<u8>, &'a Value);
-
-    #[inline]
-    fn next(&mut self) -> Option<(&'a Vec<u8>, &'a Value)> {
-        self.inner.next()
-    }
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.inner.size_hint()
+        self.db.data[self.index].checkpoint().unwrap();
     }
 }
 
@@ -1816,7 +1802,7 @@ impl Database {
     fn is_expired(&self, index: usize, key: &[u8]) -> bool {
         !self.loading
             && match self.data_expiration_ms[index].get(key) {
-                Some(t) => t <= &mstime(),
+                Some(t) => &mstime() >= t,
                 None => false,
             }
     }
@@ -1831,7 +1817,7 @@ impl Database {
     /// let mut db = Database::mock();
     ///
     /// assert_eq!(db.dbsize(0), 0);
-    /// db.get_or_create(0, &vec![1]).set(vec![1]);
+    /// db.get_or_create(0, &[1]).set(vec![1]);
     /// assert_eq!(db.dbsize(0), 1);
     /// ```
     pub fn dbsize(&self, index: usize) -> usize {
@@ -1851,24 +1837,26 @@ impl Database {
     ///
     /// let mut db = Database::mock();
     ///
-    /// assert_eq!(db.get(0, &vec![1]), None);
-    /// db.get_or_create(0, &vec![1]).set(vec![1]);
+    /// assert_eq!(db.get(0, &[1]), None);
+    /// db.get_or_create(0, &[1]).set(vec![1]);
     ///
     /// let mut value = Value::Nil;
     /// value.set(vec![1]);
     ///
-    /// assert_eq!(db.get(0, &vec![1]), Some(&value));
+    /// assert_eq!(db.get(0, &[1]), Some(&value));
     /// ```
     pub fn get(&mut self, index: usize, key: &[u8]) -> Option<Value> {
         if self.is_expired(index, key) {
             None
         } else {
-            bincode::deserialize_from(
-                self.data[index]
-                    .get(std::str::from_utf8(key).unwrap())
-                    .unwrap()?,
+            Some(
+                bincode::deserialize_from(
+                    self.data[index]
+                        .get(std::str::from_utf8(key).unwrap())
+                        .unwrap()?,
+                )
+                .unwrap(),
             )
-            .unwrap()
         }
     }
 
@@ -1881,9 +1869,9 @@ impl Database {
     ///
     /// let mut db = Database::mock();
     ///
-    /// assert_eq!(db.get_mut(0, &vec![1]), None);
-    /// db.get_or_create(0, &vec![1]).set(vec![1]).unwrap();
-    /// db.get_mut(0, &vec![1]).unwrap().set(vec![2]);
+    /// assert_eq!(db.get_mut(0, &[1]), None);
+    /// db.get_or_create(0, &[1]).set(vec![1]).unwrap();
+    /// db.get_mut(0, &[1]).unwrap().set(vec![2]);
     /// ```
     pub fn get_mut(&mut self, index: usize, key: &[u8]) -> Option<ValueRef<'_>> {
         if self.is_expired(index, key) {
@@ -1910,12 +1898,17 @@ impl Database {
     ///
     /// let mut db = Database::mock();
     ///
-    /// assert_eq!(db.remove(0, &vec![1]), None);
-    /// db.get_or_create(0, &vec![1]).set(vec![1]).unwrap();
-    /// assert!(db.remove(0, &vec![1]).is_some());
+    /// assert_eq!(db.remove(0, &[1]), None);
+    /// db.get_or_create(0, &[1]).set(vec![1]).unwrap();
+    /// assert!(db.remove(0, &[1]).is_some());
     /// ```
-    pub fn remove(&mut self, _index: usize, _key: &[u8]) -> Option<Value> {
-        unimplemented!()
+    pub fn remove(&mut self, index: usize, key: &[u8]) -> Option<Value> {
+        let out = self.get(index, key)?;
+
+        self.data[index].remove(std::str::from_utf8(key).unwrap().to_owned());
+        self.data[index].checkpoint().unwrap();
+
+        Some(out)
     }
 
     /// Sets a key expiration time, in milliseconds.
@@ -1935,8 +1928,8 @@ impl Database {
     }
 
     /// Removes all keys in a database.
-    pub fn clear(&mut self, _index: usize) {
-        unimplemented!()
+    pub fn clear(&mut self, index: usize) {
+        self.data[index].clear().unwrap()
     }
 
     /// Returns a mutable reference to a value for a key. If the value was not
@@ -1949,11 +1942,11 @@ impl Database {
     ///
     /// let mut db = Database::mock();
     ///
-    /// assert_eq!(db.get(0, &vec![1]), None);
-    /// db.get_or_create(0, &vec![1]).set(vec![1]).unwrap();
-    /// assert_eq!(db.get(0, &vec![1]).unwrap().strlen().unwrap(), 1);
-    /// db.get_or_create(0, &vec![1]).append(vec![2]).unwrap();
-    /// assert_eq!(db.get(0, &vec![1]).unwrap().strlen().unwrap(), 2);
+    /// assert_eq!(db.get(0, &[1]), None);
+    /// db.get_or_create(0, &[1]).set(vec![1]).unwrap();
+    /// assert_eq!(db.get(0, &[1]).unwrap().strlen().unwrap(), 1);
+    /// db.get_or_create(0, &[1]).append(vec![2]).unwrap();
+    /// assert_eq!(db.get(0, &[1]).unwrap().strlen().unwrap(), 2);
     /// ```
     pub fn get_or_create(&mut self, index: usize, key: &[u8]) -> ValueRef<'_> {
         if self.is_expired(index, key) {
@@ -2060,7 +2053,7 @@ impl Database {
     ///
     /// let (tx, rx) = channel();
     /// db.subscribe(vec![1], tx);
-    /// db.publish(&vec![1], &vec![0, 1, 2, 3]);
+    /// db.publish(&[1], &[0, 1, 2, 3]);
     /// assert_eq!(rx.try_recv().unwrap().unwrap(), PubsubEvent::Message(
     ///     vec![1],
     ///     None,
@@ -2091,7 +2084,7 @@ impl Database {
     /// let subscriber_id = db.subscribe(vec![1], tx);
     /// assert!(db.unsubscribe(vec![1], subscriber_id));
     /// assert!(!db.unsubscribe(vec![1], subscriber_id));
-    /// db.publish(&vec![1], &vec![0, 1, 2, 3]);
+    /// db.publish(&[1], &[0, 1, 2, 3]);
     /// assert_eq!(rx.try_recv().unwrap_err(), TryRecvError::Disconnected);
     /// ```
     pub fn unsubscribe(&mut self, channel: Vec<u8>, subscriber_id: usize) -> bool {
@@ -2123,7 +2116,7 @@ impl Database {
     ///
     /// let (tx, rx) = channel();
     /// db.psubscribe(b"foo*baz".to_vec(), tx);
-    /// db.publish(&b"foobarbaz".to_vec(), &vec![0, 1, 2, 3]);
+    /// db.publish(&b"foobarbaz".to_vec(), &[0, 1, 2, 3]);
     /// assert_eq!(rx.try_recv().unwrap().unwrap(), PubsubEvent::Message(
     ///     b"foobarbaz".to_vec(),
     ///     Some(b"foo*baz".to_vec()),
@@ -2199,11 +2192,11 @@ impl Database {
     ///
     /// let mut db = Database::mock();
     ///
-    /// assert_eq!(db.get(0, &vec![1]), None);
-    /// db.get_or_create(0, &vec![1]).set(vec![1]).unwrap();
-    /// db.get_or_create(1, &vec![1]).set(vec![1]).unwrap();
+    /// assert_eq!(db.get(0, &[1]), None);
+    /// db.get_or_create(0, &[1]).set(vec![1]).unwrap();
+    /// db.get_or_create(1, &[1]).set(vec![1]).unwrap();
     /// db.clearall();
-    /// assert!(!db.get(0, &vec![1]).is_some());
+    /// assert!(!db.get(0, &[1]).is_some());
     /// ```
     pub fn clearall(&mut self) {
         for index in 0..(self.config.databases as usize) {
@@ -2238,17 +2231,17 @@ impl Database {
     }
 
     /// Iterate over the keys in one database
-    pub fn iter_db(&self, _dbindex: usize) -> Iter {
-        unimplemented!()
+    pub fn iter_db(&mut self, index: usize) -> jigawatt_storage::IterMut<'_> {
+        self.data[index].into_iter()
     }
 
     /// Collect all keys from a database matching a pattern.
-    pub fn keys(&self, dbindex: usize, pattern: &[u8]) -> Vec<Vec<u8>> {
+    pub fn keys(&mut self, dbindex: usize, pattern: &[u8]) -> Vec<Vec<u8>> {
         let iter = self.iter_db(dbindex);
         let mut responses = Vec::with_capacity(iter.size_hint().1.unwrap_or(1));
         for (k, _) in iter {
-            if glob_match(pattern, k, false) {
-                responses.push(k.clone())
+            if glob_match(pattern, k.as_bytes(), false) {
+                responses.push(k.to_owned().into_bytes())
             }
         }
         responses
@@ -2301,6 +2294,10 @@ impl Database {
                 }
             }
         }
+
+        for db in &mut self.data {
+            db.checkpoint().unwrap()
+        }
     }
 
     pub fn monitor_add(&mut self, sender: Sender<String>) {
@@ -2344,15 +2341,15 @@ mod test_command {
     use std::sync::mpsc::channel;
     use std::usize;
 
-    use config::Config;
-    use logger::{Level, Logger};
-    use util::mstime;
+    use jigawatt_config::Config;
+    use jigawatt_logger::{Level, Logger};
+    use jigawatt_util::mstime;
     use zset::ValueSortedSet;
 
     use crate::{list::ValueList, set::ValueSet, string::ValueString, zset};
 
     use super::{Database, PubsubEvent, Value};
-    use parser::{Argument, ParsedCommand};
+    use jigawatt_parser::{Argument, ParsedCommand};
 
     #[test]
     fn lpush() {
@@ -2801,7 +2798,7 @@ mod test_command {
         assert_eq!(value2.sadd(v3.clone(), 100).unwrap(), true);
 
         assert_eq!(
-            value1.sdiff(&vec![&value2]).unwrap(),
+            value1.sdiff(&[value2]).unwrap(),
             vec![v2].iter().cloned().collect::<HashSet<_>>()
         );
     }
@@ -2822,20 +2819,19 @@ mod test_command {
 
         assert_eq!(
             value1
-                .sinter(&vec![&value2])
+                .sinter(&[value2.clone()])
                 .unwrap()
                 .iter()
                 .collect::<Vec<_>>(),
             vec![&v1]
         );
 
-        let empty: Vec<&Value> = Vec::new();
         assert_eq!(
-            value1.sinter(&empty).unwrap(),
+            value1.sinter(&[]).unwrap(),
             vec![v1, v2].iter().cloned().collect::<HashSet<_>>()
         );
 
-        assert_eq!(value1.sinter(&vec![&value2, &Value::Nil]).unwrap().len(), 0);
+        assert_eq!(value1.sinter(&[value2, Value::Nil]).unwrap().len(), 0);
     }
 
     #[test]
@@ -2850,7 +2846,7 @@ mod test_command {
 
         assert_eq!(
             value1
-                .sinter(&vec![&value2])
+                .sinter(&[value2.clone()])
                 .unwrap()
                 .iter()
                 .collect::<Vec<_>>()
@@ -2859,7 +2855,7 @@ mod test_command {
         );
         assert_eq!(
             value2
-                .sinter(&vec![&value1])
+                .sinter(&[value1])
                 .unwrap()
                 .iter()
                 .collect::<Vec<_>>()
@@ -2883,7 +2879,7 @@ mod test_command {
         assert_eq!(value2.sadd(v3.clone(), 100).unwrap(), true);
 
         assert_eq!(
-            value1.sunion(&vec![&value2]).unwrap(),
+            value1.sunion(&[value2.clone()]).unwrap(),
             vec![&v1, &v2, &v3]
                 .iter()
                 .cloned()
@@ -2891,9 +2887,8 @@ mod test_command {
                 .collect::<HashSet<_>>()
         );
 
-        let empty: Vec<&Value> = Vec::new();
         assert_eq!(
-            value1.sunion(&empty).unwrap(),
+            value1.sunion(&[]).unwrap(),
             vec![&v1, &v2]
                 .iter()
                 .cloned()
@@ -2902,7 +2897,7 @@ mod test_command {
         );
 
         assert_eq!(
-            value1.sunion(&vec![&value2, &Value::Nil]).unwrap(),
+            value1.sunion(&[value2, Value::Nil]).unwrap(),
             vec![&v1, &v2, &v3]
                 .iter()
                 .cloned()
@@ -2924,7 +2919,7 @@ mod test_command {
         assert_eq!(value2.sadd(v3.clone(), 100).unwrap(), true);
 
         assert_eq!(
-            value1.sunion(&vec![&value2]).unwrap(),
+            value1.sunion(&[value2]).unwrap(),
             vec![&v1, &v2, &v3]
                 .iter()
                 .cloned()
@@ -2944,7 +2939,7 @@ mod test_command {
     #[test]
     fn get_empty() {
         let config = Config::new(Logger::new(Level::Warning));
-        let database = Database::new(config);
+        let mut database = Database::new(config);
         let key = vec![1u8];
         assert!(database.get(0, &key).is_none());
     }
@@ -3069,7 +3064,7 @@ mod test_command {
         database.set_msexpiration(0, key.clone(), mstime() + 10000);
         assert_eq!(
             database.get(0, &key),
-            Some(&Value::String(ValueString::Data(expected)))
+            Some(Value::String(ValueString::Data(expected)))
         );
     }
 
@@ -3872,7 +3867,7 @@ mod test_command {
         );
 
         value3 = value3
-            .zunion(&vec![&value1, &value2], None, zset::Aggregate::Sum)
+            .zunion(&[value1, value2], None, zset::Aggregate::Sum)
             .unwrap();
         assert_eq!(value3.zcard().unwrap(), 3);
         assert!((value3.zscore(v1.clone()).unwrap().unwrap() - 2.3).abs() < 0.01);
@@ -3916,7 +3911,7 @@ mod test_command {
         );
 
         value3 = value3
-            .zunion(&vec![&value1, &value2], None, zset::Aggregate::Min)
+            .zunion(&[value1, value2], None, zset::Aggregate::Min)
             .unwrap();
         assert_eq!(value3.zcard().unwrap(), 3);
         assert!((value3.zscore(v1.clone()).unwrap().unwrap() - 1.1).abs() < 0.01);
@@ -3960,7 +3955,7 @@ mod test_command {
         );
 
         value3 = value3
-            .zunion(&vec![&value1, &value2], None, zset::Aggregate::Max)
+            .zunion(&[value1, value2], None, zset::Aggregate::Max)
             .unwrap();
         assert_eq!(value3.zcard().unwrap(), 3);
         assert!((value3.zscore(v1.clone()).unwrap().unwrap() - 1.2).abs() < 0.01);
@@ -4005,7 +4000,7 @@ mod test_command {
 
         value3 = value3
             .zunion(
-                &vec![&value1, &value2],
+                &[value1, value2],
                 Some(vec![100.0, 200.0]),
                 zset::Aggregate::Max,
             )
@@ -4052,7 +4047,7 @@ mod test_command {
         );
 
         value3 = value3
-            .zinter(&vec![&value1, &value2], None, zset::Aggregate::Sum)
+            .zinter(&[value1, value2], None, zset::Aggregate::Sum)
             .unwrap();
         assert_eq!(value3.zcard().unwrap(), 1);
         assert!((value3.zscore(v1.clone()).unwrap().unwrap() - 2.3).abs() < 0.01);
@@ -4094,7 +4089,7 @@ mod test_command {
         );
 
         value3 = value3
-            .zinter(&vec![&value1, &value2], None, zset::Aggregate::Min)
+            .zinter(&[value1, value2], None, zset::Aggregate::Min)
             .unwrap();
         assert_eq!(value3.zcard().unwrap(), 1);
         assert!((value3.zscore(v1.clone()).unwrap().unwrap() - 1.1).abs() < 0.01);
@@ -4136,7 +4131,7 @@ mod test_command {
         );
 
         value3 = value3
-            .zinter(&vec![&value1, &value2], None, zset::Aggregate::Max)
+            .zinter(&[value1, value2], None, zset::Aggregate::Max)
             .unwrap();
         assert_eq!(value3.zcard().unwrap(), 1);
         assert!((value3.zscore(v1.clone()).unwrap().unwrap() - 1.2).abs() < 0.01);
@@ -4179,7 +4174,7 @@ mod test_command {
 
         value3 = value3
             .zinter(
-                &vec![&value1, &value2],
+                &[value1, value2],
                 Some(vec![100.0, 200.0]),
                 zset::Aggregate::Max,
             )
@@ -4232,44 +4227,6 @@ mod test_command {
                     .as_response()
             )
         );
-    }
-
-    #[test]
-    fn rehashing() {
-        let config = Config::new(Logger::new(Level::Warning));
-        let mut database = Database::new(config);
-        for i in 0u32..1000 {
-            let key = vec![(i % 256) as u8, (i / 256) as u8];
-            database.get_or_create(0, &key).set(key.clone()).unwrap();
-        }
-        assert_eq!(database.data[0].len(), 1000);
-        assert!(database.data[0].capacity() >= 1000);
-        for i in 0u32..1000 {
-            let key = vec![(i % 256) as u8, (i / 256) as u8];
-            database.remove(0, &key).unwrap();
-        }
-        // freeing memory
-        assert!(database.data[0].capacity() < 1000);
-    }
-
-    #[test]
-    fn no_rehashing() {
-        let mut config = Config::new(Logger::new(Level::Warning));
-        config.databases = 1;
-        config.active_rehashing = false;
-        let mut database = Database::new(config);
-        for i in 0u32..1000 {
-            let key = vec![(i % 256) as u8, (i / 256) as u8];
-            database.get_or_create(0, &key).set(key.clone()).unwrap();
-        }
-        assert_eq!(database.data[0].len(), 1000);
-        assert!(database.data[0].capacity() >= 1000);
-        for i in 0u32..1000 {
-            let key = vec![(i % 256) as u8, (i / 256) as u8];
-            database.remove(0, &key).unwrap();
-        }
-        // no freeing memory
-        assert!(database.data[0].capacity() > 1000);
     }
 
     #[test]
@@ -4328,24 +4285,24 @@ mod test_command {
     fn watch() {
         let config = Config::new(Logger::new(Level::Warning));
         let mut database = Database::new(config);
-        database.key_watch(0, &vec![1], 31);
-        assert!(database.key_watch_verify(0, &vec![1], 31));
-        database.key_updated(0, &vec![2]);
-        database.key_updated(1, &vec![1]);
-        assert!(database.key_watch_verify(0, &vec![1], 31));
-        database.key_updated(0, &vec![1]);
-        assert!(!database.key_watch_verify(0, &vec![1], 31));
+        database.key_watch(0, &[1], 31);
+        assert!(database.key_watch_verify(0, &[1], 31));
+        database.key_updated(0, &[2]);
+        database.key_updated(1, &[1]);
+        assert!(database.key_watch_verify(0, &[1], 31));
+        database.key_updated(0, &[1]);
+        assert!(!database.key_watch_verify(0, &[1], 31));
     }
 
     #[test]
     fn unwatch() {
         let config = Config::new(Logger::new(Level::Warning));
         let mut database = Database::new(config);
-        database.key_watch(0, &vec![1], 31);
-        database.key_watch(0, &vec![1], 32);
-        database.key_unwatch(0, &vec![1], 31);
-        assert!(database.key_watch_verify(0, &vec![1], 32));
-        assert!(!database.key_watch_verify(0, &vec![1], 31));
+        database.key_watch(0, &[1], 31);
+        database.key_watch(0, &[1], 32);
+        database.key_unwatch(0, &[1], 31);
+        assert!(database.key_watch_verify(0, &[1], 32));
+        assert!(!database.key_watch_verify(0, &[1], 31));
     }
 
     #[test]

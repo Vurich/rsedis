@@ -1,15 +1,13 @@
-use std::cmp::Ordering;
-use std::collections::Bound;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::f64::{INFINITY, NEG_INFINITY};
-use std::io;
-use std::io::Write;
+use std::{
+    cmp::Ordering,
+    collections::{BTreeSet, Bound, HashMap, HashSet},
+    f64::{INFINITY, NEG_INFINITY},
+    io::{self, Write},
+};
 
 use crate::{dbutil::normalize_position, error::OperationError};
 
 use serde::{Deserialize, Serialize};
-use skiplist::OrderedSkipList;
 
 use jigawatt_rdbutil::{
     constants::{TYPE_ZSET, VERSION},
@@ -27,7 +25,7 @@ pub enum Aggregate {
  * f64 does not implement those traits because comparing floats has problems
  * but in the context of rsedis this basic implementation should be enough.
  **/
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SortedSetMember {
     f: f64,
     s: Vec<u8>,
@@ -110,28 +108,10 @@ impl PartialOrd for SortedSetMember {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub enum ValueSortedSet {
     // FIXME: Vec<u8> is repeated in memory
-    Data(OrderedSkipList<SortedSetMember>, HashMap<Vec<u8>, f64>),
-}
-
-impl<'de> Deserialize<'de> for ValueSortedSet {
-    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        unimplemented!()
-    }
-}
-
-impl Serialize for ValueSortedSet {
-    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        unimplemented!()
-    }
+    Data(BTreeSet<SortedSetMember>, HashMap<Vec<u8>, f64>),
 }
 
 impl Default for ValueSortedSet {
@@ -142,9 +122,9 @@ impl Default for ValueSortedSet {
 
 impl ValueSortedSet {
     pub fn new() -> Self {
-        let skiplist = OrderedSkipList::new();
+        let set = Default::default();
         let hmap = HashMap::new();
-        ValueSortedSet::Data(skiplist, hmap)
+        ValueSortedSet::Data(set, hmap)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -159,7 +139,7 @@ impl ValueSortedSet {
         zero_on_nan: bool,
     ) -> Result<bool, OperationError> {
         match self {
-            ValueSortedSet::Data(skiplist, hmap) => {
+            ValueSortedSet::Data(set, hmap) => {
                 let mut score = s;
                 let contains = hmap.contains_key(&el);
                 if contains && nx {
@@ -179,7 +159,7 @@ impl ValueSortedSet {
                     if score.is_nan() && !zero_on_nan {
                         return Err(OperationError::NotANumberError);
                     }
-                    skiplist.remove(&SortedSetMember::new(val, el.clone()));
+                    set.remove(&SortedSetMember::new(val, el.clone()));
                 }
                 if score.is_nan() {
                     if zero_on_nan {
@@ -188,7 +168,7 @@ impl ValueSortedSet {
                         return Err(OperationError::NotANumberError);
                     }
                 }
-                skiplist.insert(SortedSetMember::new(score, el.clone()));
+                set.insert(SortedSetMember::new(score, el.clone()));
                 hmap.insert(el, score);
                 if ch {
                     Ok(true)
@@ -200,7 +180,7 @@ impl ValueSortedSet {
     }
 
     pub fn zcard(&self) -> usize {
-        match *self {
+        match self {
             ValueSortedSet::Data(_, ref hmap) => hmap.len(),
         }
     }
@@ -213,10 +193,10 @@ impl ValueSortedSet {
 
     pub fn zincrby(&mut self, increment: f64, member: Vec<u8>) -> Result<f64, OperationError> {
         match self {
-            ValueSortedSet::Data(skiplist, hmap) => {
+            ValueSortedSet::Data(set, hmap) => {
                 let mut val = match hmap.get(&member) {
                     Some(val) => {
-                        skiplist.remove(&SortedSetMember::new(*val, member.clone()));
+                        set.remove(&SortedSetMember::new(*val, member.clone()));
                         *val
                     }
                     None => 0.0,
@@ -228,7 +208,7 @@ impl ValueSortedSet {
                     return Err(OperationError::NotANumberError);
                 }
 
-                skiplist.insert(SortedSetMember::new(val, member.clone()));
+                set.insert(SortedSetMember::new(val, member.clone()));
                 hmap.insert(member, val);
 
                 Ok(val)
@@ -237,8 +217,8 @@ impl ValueSortedSet {
     }
 
     fn rangebyscore(&self, min: Bound<f64>, max: Bound<f64>) -> Vec<&SortedSetMember> {
-        let skiplist = match *self {
-            ValueSortedSet::Data(ref skiplist, _) => skiplist,
+        let set = match self {
+            ValueSortedSet::Data(set, _) => set,
         };
         let mut f1 = SortedSetMember::new(0.0, vec![]);
         let mut f2 = SortedSetMember::new(0.0, vec![]);
@@ -268,7 +248,7 @@ impl ValueSortedSet {
             Bound::Unbounded => Bound::Unbounded,
         };
 
-        skiplist.range(m1, m2).collect::<Vec<_>>()
+        set.range((m1, m2)).collect::<Vec<_>>()
     }
 
     pub fn zcount(&self, min: Bound<f64>, max: Bound<f64>) -> usize {
@@ -276,15 +256,15 @@ impl ValueSortedSet {
     }
 
     fn rangebylex(&self, min: Bound<Vec<u8>>, max: Bound<Vec<u8>>) -> Vec<&SortedSetMember> {
-        let skiplist = match *self {
-            ValueSortedSet::Data(ref skiplist, _) => skiplist,
+        let skiplist = match self {
+            ValueSortedSet::Data(skiplist, _) => skiplist,
         };
 
         if skiplist.is_empty() {
             return vec![];
         }
 
-        let f = skiplist.front().unwrap().get_f64();
+        let f = skiplist.first().unwrap().get_f64();
         let mut f1 = SortedSetMember::new(*f, vec![]);
         let mut f2 = SortedSetMember::new(*f, vec![]);
         let m1 = match min {
@@ -311,7 +291,7 @@ impl ValueSortedSet {
             Bound::Unbounded => Bound::Unbounded,
         };
 
-        skiplist.range(m1, m2).collect::<Vec<_>>()
+        skiplist.range((m1, m2)).collect::<Vec<_>>()
     }
 
     pub fn zlexcount(&self, min: Bound<Vec<u8>>, max: Bound<Vec<u8>>) -> usize {
@@ -319,8 +299,8 @@ impl ValueSortedSet {
     }
 
     pub fn zrem(&mut self, member: Vec<u8>) -> bool {
-        let (skiplist, hmap) = match *self {
-            ValueSortedSet::Data(ref mut skiplist, ref mut hmap) => (skiplist, hmap),
+        let (skiplist, hmap) = match self {
+            ValueSortedSet::Data(skiplist, hmap) => (skiplist, hmap),
         };
         let score = match hmap.remove(&member) {
             Some(val) => val,
@@ -337,12 +317,20 @@ impl ValueSortedSet {
             Bound::Unbounded => 0,
         };
         let count = self.zcount(min, max);
-        let (skiplist, hmap) = match *self {
-            ValueSortedSet::Data(ref mut skiplist, ref mut hmap) => (skiplist, hmap),
+        let (skiplist, hmap) = match self {
+            ValueSortedSet::Data(skiplist, hmap) => (skiplist, hmap),
         };
 
         for _ in 0..count {
-            let el = skiplist.remove_index(pos);
+            let mut i = 0;
+            let el = skiplist
+                .drain_filter(|v| {
+                    let out = i == pos;
+                    i += 1;
+                    out
+                })
+                .next()
+                .unwrap();
             hmap.remove(&el.s);
         }
         count
@@ -355,19 +343,27 @@ impl ValueSortedSet {
             Bound::Unbounded => 0,
         };
         let count = self.zlexcount(min, max);
-        let (skiplist, hmap) = match *self {
-            ValueSortedSet::Data(ref mut skiplist, ref mut hmap) => (skiplist, hmap),
+        let (skiplist, hmap) = match self {
+            ValueSortedSet::Data(skiplist, hmap) => (skiplist, hmap),
         };
 
         for _ in 0..count {
-            let el = skiplist.remove_index(pos);
+            let mut i = 0;
+            let el = skiplist
+                .drain_filter(|v| {
+                    let out = i == pos;
+                    i += 1;
+                    out
+                })
+                .next()
+                .unwrap();
             hmap.remove(&el.s);
         }
         count
     }
 
     fn normalize_range(&self, start: i64, stop: i64, rev: bool) -> (usize, usize) {
-        let skiplist = match *self {
+        let skiplist = match self {
             ValueSortedSet::Data(ref skiplist, _) => skiplist,
         };
 
@@ -427,34 +423,39 @@ impl ValueSortedSet {
             return 0;
         }
 
-        let (skiplist, hmap) = match *self {
-            ValueSortedSet::Data(ref mut skiplist, ref mut hmap) => (skiplist, hmap),
+        let (skiplist, hmap) = match self {
+            ValueSortedSet::Data(skiplist, hmap) => (skiplist, hmap),
         };
 
         for _ in 0..(stop - start + 1) {
-            let el = skiplist.remove_index(start);
+            let mut i = 0;
+            let el = skiplist
+                .drain_filter(|v| {
+                    let out = i == start;
+                    i += 1;
+                    out
+                })
+                .next()
+                .unwrap();
             hmap.remove(&el.s);
         }
         stop - start + 1
     }
 
-    pub fn zrange(&self, _start: i64, _stop: i64, withscores: bool, rev: bool) -> Vec<Vec<u8>> {
-        let skiplist = match *self {
-            ValueSortedSet::Data(ref skiplist, _) => skiplist,
+    pub fn zrange(&self, start: i64, stop: i64, withscores: bool, rev: bool) -> Vec<Vec<u8>> {
+        let set = match self {
+            ValueSortedSet::Data(set, _) => set,
         };
 
-        let (start, stop) = self.normalize_range(_start, _stop, rev);
+        let (start, stop) = self.normalize_range(start, stop, rev);
         if stop < start {
             return vec![];
         }
 
-        let first = skiplist.get(start).unwrap();
+        let first = set.iter().nth(start).unwrap();
         let mut r = vec![];
         if rev {
-            for member in skiplist
-                .range(Bound::Included(first), Bound::Unbounded)
-                .take(stop - start + 1)
-            {
+            for member in set.range(first..).take(stop - start + 1) {
                 if withscores {
                     r.push(format!("{}", member.get_f64()).into_bytes());
                 }
@@ -462,10 +463,7 @@ impl ValueSortedSet {
             }
             r = r.iter().rev().cloned().collect::<Vec<_>>();
         } else {
-            for member in skiplist
-                .range(Bound::Included(first), Bound::Unbounded)
-                .take(stop - start + 1)
-            {
+            for member in set.range(first..).take(stop - start + 1) {
                 r.push(member.get_vec().clone());
                 if withscores {
                     r.push(format!("{}", member.get_f64()).into_bytes());
@@ -484,29 +482,50 @@ impl ValueSortedSet {
         count: usize,
         rev: bool,
     ) -> Vec<Vec<u8>> {
-        let skiplist = match *self {
-            ValueSortedSet::Data(ref skiplist, _) => skiplist,
+        let set = match self {
+            ValueSortedSet::Data(set, _) => set,
+        };
+
+        let (m1, m2) = match (m1, m2) {
+            (Bound::Included(data1), Bound::Included(data2))
+            | (Bound::Included(data1), Bound::Excluded(data2)) => {
+                if data1 > data2 {
+                    (m1, m1)
+                } else {
+                    (m1, m2)
+                }
+            }
+            (Bound::Excluded(data1), Bound::Included(data2))
+            | (Bound::Excluded(data1), Bound::Excluded(data2)) => {
+                if data1 >= data2 {
+                    (Bound::Included(data1), m1)
+                } else {
+                    (m1, m2)
+                }
+            }
+            (_, Bound::Unbounded) => (m1, m2),
+            (Bound::Unbounded, _) => (m2, m1),
         };
 
         let mut r = vec![];
         if rev {
-            let len = skiplist.len();
+            let len = set.len();
             let mut c = count;
             if c + offset > len {
                 c = if len > offset { len - offset } else { 0 };
             }
 
-            for member in skiplist.range(m1, m2).rev().skip(offset).take(c) {
+            for member in set.range((m1, m2)).rev().skip(offset).take(c) {
                 r.push(member.get_vec().clone());
                 if withscores {
                     r.push(format!("{}", member.get_f64()).into_bytes());
                 }
             }
         } else {
-            for member in skiplist.range(m1, m2).skip(offset).take(count) {
+            for member in set.range((m1, m2)).skip(offset).take(count) {
                 r.push(member.get_vec().clone());
                 if withscores {
-                    r.push(format!("{}", member.get_f64()).into_bytes());
+                    r.push(member.get_f64().to_string().into_bytes());
                 }
             }
         }
@@ -570,11 +589,11 @@ impl ValueSortedSet {
         count: usize,
         rev: bool,
     ) -> Vec<Vec<u8>> {
-        let skiplist = match *self {
-            ValueSortedSet::Data(ref skiplist, _) => skiplist,
+        let set = match self {
+            ValueSortedSet::Data(set, _) => set,
         };
 
-        let f = skiplist.front().unwrap().get_f64();
+        let f = set.first().unwrap().get_f64();
 
         // FIXME: duplicated code from ZCOUNT. Trying to create a factory
         // function for this, but I failed because allocation was going
@@ -614,8 +633,8 @@ impl ValueSortedSet {
     }
 
     pub fn zrank(&self, el: Vec<u8>) -> Option<usize> {
-        let (skiplist, hashmap) = match *self {
-            ValueSortedSet::Data(ref skiplist, ref hashmap) => (skiplist, hashmap),
+        let (set, hashmap) = match self {
+            ValueSortedSet::Data(set, hashmap) => (set, hashmap),
         };
 
         let score = match hashmap.get(&el) {
@@ -624,12 +643,7 @@ impl ValueSortedSet {
         };
 
         let member = SortedSetMember::new(*score, el);
-        Some(
-            skiplist
-                .range(Bound::Unbounded, Bound::Included(&member))
-                .count()
-                - 1,
-        )
+        Some(set.range(..=&member).count() - 1)
     }
 
     pub fn zunion(
@@ -644,7 +658,7 @@ impl ValueSortedSet {
                 Some(ref ws) => ws[i],
                 None => 1.0,
             };
-            let hm = match *zset {
+            let hm = match zset {
                 ValueSortedSet::Data(_, ref hm) => hm,
             };
             for (k, v) in hm {
@@ -703,7 +717,7 @@ impl ValueSortedSet {
         }
 
         for k in intersected_keys {
-            let hm = match *zsets[0] {
+            let hm = match zsets[0] {
                 ValueSortedSet::Data(_, ref hm) => hm,
             };
             let mut score = hm.get(k).unwrap()
@@ -712,7 +726,7 @@ impl ValueSortedSet {
                     None => 1.0,
                 });
             for i in 1..zsets.len() {
-                let hm = match *zsets[i] {
+                let hm = match zsets[i] {
                     ValueSortedSet::Data(_, ref hm) => hm,
                 };
                 let s2 = hm.get(k).unwrap()
@@ -776,8 +790,8 @@ impl ValueSortedSet {
     pub fn debug_object(&self) -> String {
         let mut serialized_data = vec![];
         let serialized = self.dump(&mut serialized_data).unwrap();
-        let encoding = match *self {
-            ValueSortedSet::Data(_, _) => "skiplist",
+        let encoding = match self {
+            ValueSortedSet::Data(_, _) => "set",
         };
         format!(
             "Value at:0x0000000000 refcount:1 encoding:{} serializedlength:{} lru:0 \

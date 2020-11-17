@@ -133,7 +133,7 @@ type OrSavedState<T> = Result<T, Option<T>>;
 #[derive(Debug)]
 pub struct Db<File = std::fs::File> {
     backing_file: Tracking<File>,
-    pending: OrSavedState<HashMap<Cow<'static, str>, ValueData, fxhash::FxBuildHasher>>,
+    pending: OrSavedState<HashMap<Cow<'static, str>, Option<ValueData>, fxhash::FxBuildHasher>>,
     state: Option<Vec<(Cow<'static, str>, ValueData)>>,
     cur: Option<ValueData>,
     redo: Option<ValueData>,
@@ -165,7 +165,96 @@ const REDO_NAME: &str = ".redo";
 const INITIAL_HEADER_SIZE: u32 =
     local_header_size(UNDO_NAME) as u32 + local_header_size(REDO_NAME) as u32;
 
-impl<File> Db<File> {}
+enum IterMutState<'a> {
+    Pending {
+        pending: std::collections::hash_map::Iter<'a, Cow<'static, str>, Option<ValueData>>,
+        keys: Vec<&'a str>,
+    },
+    State {
+        keys: std::iter::Peekable<<Vec<&'a str> as IntoIterator>::IntoIter>,
+    },
+}
+
+pub struct IterMut<'a, File = std::fs::File> {
+    state: IterMutState<'a>,
+    values: std::slice::Iter<'a, (Cow<'static, str>, ValueData)>,
+    file: &'a Tracking<File>,
+}
+
+impl<'a, File> Iterator for IterMut<'a, File> {
+    type Item = (&'a str, ValueReader<'a, Tracking<File>>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match &mut self.state {
+                IterMutState::Pending { pending, keys } => {
+                    if let Some((k, v)) = pending.next() {
+                        keys.push(k);
+
+                        if let Some(v) = v {
+                            break Some((
+                                k,
+                                ValueReader {
+                                    value: *v,
+                                    file: &self.file,
+                                },
+                            ));
+                        }
+                    } else {
+                        self.state = IterMutState::State {
+                            keys: mem::take(keys).into_iter().peekable(),
+                        };
+                    }
+                }
+                IterMutState::State { keys } => {
+                    let (key, val) = self.values.next()?;
+
+                    if keys.peek().copied() == Some(&**key) {
+                        keys.next();
+                    } else {
+                        break Some((
+                            key,
+                            ValueReader {
+                                value: *val,
+                                file: &self.file,
+                            },
+                        ));
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl<'a, File> IntoIterator for &'a mut Db<File>
+where
+    File: Read + ReadAt + Seek,
+{
+    type IntoIter = IterMut<'a, File>;
+    type Item = <Self::IntoIter as Iterator>::Item;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.read_state().unwrap();
+
+        let keys = vec![UNDO_NAME, REDO_NAME];
+
+        let state = match &self.pending {
+            Ok(pending) => IterMutState::Pending {
+                pending: pending.iter(),
+                keys,
+            },
+            _ => IterMutState::State {
+                keys: keys.into_iter().peekable(),
+            },
+        };
+
+        IterMut {
+            state,
+            file: &self.backing_file,
+            values: self.state.as_ref().unwrap().iter(),
+        }
+    }
+}
 
 impl<File> Db<File>
 where
@@ -233,9 +322,15 @@ where
         }
 
         for (k, v) in mem::replace(&mut self.pending, Err(None)).unwrap_or_default() {
-            match values.binary_search_by_key(&&k[..], |(k, _)| &k[..]) {
-                Ok(i) => values[i].1 = v,
-                Err(i) => values.insert(i, (k, v)),
+            dbg!(&k);
+
+            match dbg!((v, values.binary_search_by_key(&&k[..], |(k, _)| &k[..]))) {
+                (Some(v), Ok(i)) => values[i].1 = v,
+                (None, Ok(i)) => {
+                    values.remove(i);
+                }
+                (Some(v), Err(i)) => values.insert(i, (k, v)),
+                (None, Err(_)) => {}
             }
         }
 
@@ -276,6 +371,29 @@ where
         Ok(())
     }
 
+    /// Remove a value from the database.
+    pub fn remove(&mut self, key: impl Into<Cow<'static, str>>) {
+        let mut pending =
+            mem::replace(&mut self.pending, Ok(Default::default())).unwrap_or_default();
+
+        pending.insert(key.into(), None);
+
+        self.pending = Ok(pending);
+    }
+
+    // TODO: We should probably undo to the original state rather than deleting the keys this way,
+    //       as you're not preserving undo history with this method anyway.
+    pub fn clear(&mut self) -> io::Result<()> {
+        let mut pending =
+            mem::replace(&mut self.pending, Ok(Default::default())).unwrap_or_default();
+
+        pending.extend(self.state()?.iter().cloned().map(|(k, _)| (k, None)));
+
+        self.pending = Ok(pending);
+
+        Ok(())
+    }
+
     /// Insert a new value into the database. This will write the value to the backing file immediately,
     /// although if you insert the same key many times it will simply overwrite the value and will
     /// not continue appending. This data is considered ephemeral until `.checkpoint` is called and
@@ -293,25 +411,27 @@ where
 
         match pending.entry(key.into()) {
             Entry::Occupied(mut entry) => {
-                let &ValueData { offset, size, .. } = entry.get();
-
-                let value = if value.len() <= size as usize {
-                    let out = write_value(
-                        &mut self.backing_file,
-                        Some(offset.into()),
-                        entry.key(),
-                        value,
-                    )?;
-                    out
+                let value = if let &Some(ValueData { offset, size, .. }) = entry.get() {
+                    if value.len() <= size as usize {
+                        let out = write_value(
+                            &mut self.backing_file,
+                            Some(offset.into()),
+                            entry.key(),
+                            value,
+                        )?;
+                        out
+                    } else {
+                        write_value(&mut self.backing_file, None, entry.key(), value)?
+                    }
                 } else {
                     write_value(&mut self.backing_file, None, entry.key(), value)?
                 };
 
-                *entry.get_mut() = value;
+                *entry.get_mut() = Some(value);
             }
             Entry::Vacant(vacant) => {
                 let value = write_value(&mut self.backing_file, None, vacant.key(), value)?;
-                vacant.insert(value);
+                vacant.insert(Some(value));
             }
         }
 
@@ -504,27 +624,37 @@ where
 
 impl<File> Db<File>
 where
-    File: Read + ReadAt + Seek,
+    File: ReadAt + Seek,
 {
-    /// The number of items in the database. This doesn't currently take into account pending items
+    /// The number of items in the database.
+    /// TODO: This doesn't currently take into account pending items, and it should (uncommitted items should
+    ///       be treated identically to committed ones).
     pub fn len(&self) -> io::Result<usize> {
-        use byteorder::ReadBytesExt;
-
-        if let Some(state) = &self.state {
-            Ok(state.len())
-        } else if let Some(cur) = &self.cur {
-            let mut buf = [0u8; mem::size_of::<u16>()];
-
-            self.backing_file.read_exact_at(
-                cur.offset as u64 + cur.size as u64 - EOCD_SIZE as u64
-                    + mem::size_of::<u32>() as u64,
-                &mut buf,
-            )?;
-
-            Ok((&mut &buf[..]).read_u16::<byteorder::LittleEndian>()? as usize)
+        // To allow us to return a borrow from an inner block
+        let state;
+        let state = if let Some(state) = self.state.as_ref().map(|s| &s[..]) {
+            state
+        } else if self.cur.is_some() {
+            state = self.read_state()?;
+            &state
         } else {
-            Ok(0)
+            return Ok(0);
+        };
+
+        dbg!(state);
+
+        let mut len = state.len();
+        if state.iter().any(|(name, _)| name == UNDO_NAME) {
+            len -= 1;
         }
+
+        if state.iter().any(|(name, _)| name == REDO_NAME) {
+            len -= 1;
+        }
+
+        dbg!(len);
+
+        Ok(len)
     }
 
     /// Whether the database is empty. This doesn't currently take into account pending items.
@@ -534,29 +664,26 @@ where
 
     fn state(&mut self) -> io::Result<&[(Cow<'static, str>, ValueData)]> {
         if self.state.is_none() {
-            self.read_state()?;
+            self.state = Some(self.read_state()?);
         }
 
         Ok(self.state.as_ref().map(|v| &v[..]).unwrap_or(&[]))
     }
 
-    fn read_state(&mut self) -> io::Result<()> {
+    fn read_state(&self) -> io::Result<Vec<(Cow<'static, str>, ValueData)>> {
         let cur = self.cur.ok_or(io::ErrorKind::InvalidData)?;
 
         let eocd = read_eocd(
-            &mut self.backing_file,
-            Some(cur.offset as u64 + cur.size as u64 - EOCD_SIZE as u64),
+            &self.backing_file,
+            cur.offset as u64 + cur.size as u64 - EOCD_SIZE as u64,
         )?;
 
         let mut buffer = Vec::with_capacity(eocd.cd_count as usize);
 
-        let pos = self.backing_file.seek(io::SeekFrom::Current(0))?;
-
-        self.backing_file
-            .seek(io::SeekFrom::Start(eocd.cd_start as u64))?;
+        let mut pos = eocd.cd_start as u64;
 
         for _ in 0..eocd.cd_count {
-            let central_file_header = read_central_header(&mut self.backing_file)?;
+            let central_file_header = read_central_header(&self.backing_file, pos)?;
 
             let name = match &central_file_header.name[..] {
                 UNDO_NAME => Cow::borrowed(UNDO_NAME),
@@ -564,14 +691,12 @@ where
                 _ => Cow::owned(central_file_header.name),
             };
 
+            pos += central_header_size(&name) as u64;
+
             buffer.push((name, central_file_header.value));
         }
 
-        self.state = Some(buffer);
-
-        self.backing_file.seek(io::SeekFrom::Start(pos))?;
-
-        Ok(())
+        Ok(buffer)
     }
 }
 
@@ -588,7 +713,7 @@ where
             .ok()
             .and_then(|pending| pending.get(key))
         {
-            Ok(Some(*val))
+            Ok(*val)
         } else {
             let state = self.state()?;
 
@@ -629,14 +754,19 @@ struct CentralFileHeader {
     value: ValueData,
 }
 
-fn read_central_header<File>(mut file: File) -> io::Result<CentralFileHeader>
+const fn central_header_size(name: &str) -> usize {
+    name.len() + CENTRAL_FILE_HEADER_SIZE
+}
+
+fn read_central_header<File>(file: File, pos: u64) -> io::Result<CentralFileHeader>
 where
-    File: Read,
+    File: ReadAt,
 {
     use byteorder::ReadBytesExt;
 
     let mut bytes = [0; CENTRAL_FILE_HEADER_SIZE];
-    file.read_exact(&mut bytes)?;
+
+    file.read_exact_at(pos, &mut bytes)?;
 
     let mut bytes = io::Cursor::new(&bytes[..]);
 
@@ -656,13 +786,13 @@ where
 
     let mut out = vec![0; filename_length as usize];
 
-    file.read_exact(&mut out)?;
+    file.read_exact_at(pos + CENTRAL_FILE_HEADER_SIZE as u64, &mut out)?;
 
     let out = std::str::from_utf8(&out)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
         .to_string();
 
-    // HACK
+    // HACK: this is to ensure that the size of the fake `.undo` and `.redo` files match
     let header_size = if out == UNDO_NAME {
         INITIAL_HEADER_SIZE
     } else {
@@ -688,18 +818,14 @@ struct Eocd {
     cd_size: u32,
 }
 
-fn read_eocd<File>(mut file: File, pos: Option<u64>) -> io::Result<Eocd>
+fn read_eocd<File>(file: File, pos: u64) -> io::Result<Eocd>
 where
-    File: Read + ReadAt,
+    File: ReadAt,
 {
     use byteorder::ReadBytesExt;
 
     let mut bytes = [0; EOCD_SIZE];
-    if let Some(pos) = pos {
-        file.read_exact_at(pos, &mut bytes)?;
-    } else {
-        file.read_exact(&mut bytes)?;
-    }
+    file.read_exact_at(pos, &mut bytes)?;
 
     let mut bytes = io::Cursor::new(&bytes);
 
