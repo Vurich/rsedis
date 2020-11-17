@@ -119,21 +119,21 @@ impl<'a> ParsedCommand<'a> {
     ///
     /// ```
     /// # use std::collections::Bound;
-    /// # use parser::{ParsedCommand, Argument};
+    /// # use jigawatt_parser::{ParsedCommand, Argument};
     /// let parser = ParsedCommand::new(b"+inf", vec![Argument { pos: 0, len: 4 }]);
     /// assert_eq!(parser.get_f64_bound(0).unwrap(), Bound::Unbounded);
     /// ```
     ///
     /// ```
     /// # use std::collections::Bound;
-    /// # use parser::{ParsedCommand, Argument};
+    /// # use jigawatt_parser::{ParsedCommand, Argument};
     /// let parser = ParsedCommand::new(b"1.23", vec![Argument { pos: 0, len: 4 }]);
     /// assert_eq!(parser.get_f64_bound(0).unwrap(), Bound::Included(1.23));
     /// ```
     ///
     /// ```
     /// # use std::collections::Bound;
-    /// # use parser::{ParsedCommand, Argument};
+    /// # use jigawatt_parser::{ParsedCommand, Argument};
     /// let parser = ParsedCommand::new(b"(1.23", vec![Argument { pos: 0, len: 5 }]);
     /// assert_eq!(parser.get_f64_bound(0).unwrap(), Bound::Excluded(1.23));
     /// ```
@@ -166,7 +166,7 @@ impl<'a> ParsedCommand<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use parser::{ParsedCommand, Argument};
+    /// # use jigawatt_parser::{ParsedCommand, Argument};
     /// let parser = ParsedCommand::new(b"1.23", vec![Argument { pos: 0, len: 4 }]);
     /// assert_eq!(parser.get_f64(0).unwrap(), 1.23);
     /// ```
@@ -191,7 +191,7 @@ impl<'a> ParsedCommand<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use parser::{ParsedCommand, Argument};
+    /// # use jigawatt_parser::{ParsedCommand, Argument};
     /// let parser = ParsedCommand::new(b"-123", vec![Argument { pos: 0, len: 4 }]);
     /// assert_eq!(parser.get_i64(0).unwrap(), -123);
     /// ```
@@ -206,7 +206,7 @@ impl<'a> ParsedCommand<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use parser::{ParsedCommand, Argument};
+    /// # use jigawatt_parser::{ParsedCommand, Argument};
     /// let parser = ParsedCommand::new(b"foo", vec![Argument { pos: 0, len: 3 }]);
     /// assert_eq!(parser.get_str(0).unwrap(), "foo");
     /// ```
@@ -220,7 +220,7 @@ impl<'a> ParsedCommand<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use parser::{ParsedCommand, Argument};
+    /// # use jigawatt_parser::{ParsedCommand, Argument};
     /// let parser = ParsedCommand::new(b"foo", vec![Argument { pos: 0, len: 3 }]);
     /// assert_eq!(parser.get_vec(0).unwrap(), b"foo".to_vec());
     /// ```
@@ -234,7 +234,7 @@ impl<'a> ParsedCommand<'a> {
     /// # Examples
     ///
     /// ```
-    /// # use parser::{ParsedCommand, Argument};
+    /// # use jigawatt_parser::{ParsedCommand, Argument};
     /// let parser = ParsedCommand::new(b"foo", vec![Argument { pos: 0, len: 3 }]);
     /// assert_eq!(parser.get_slice(0).unwrap(), b"foo");
     /// ```
@@ -317,7 +317,7 @@ fn parse_int(input: &[u8], len: usize, name: &str) -> Result<(Option<usize>, usi
 /// # Examples
 ///
 /// ```
-/// # use parser::parse;
+/// # use jigawatt_parser::parse;
 /// let s = b"*3\r\n$3\r\nSET\r\n$5\r\nmykey\r\n$2\r\n10\r\n";
 /// let (parser, len) = parse(s).unwrap();
 /// assert_eq!(len, 32);

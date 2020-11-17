@@ -11,7 +11,7 @@ use crate::error::OperationError;
 ///
 /// # Examples
 /// ```
-/// use database::dbutil::normalize_position;
+/// use jigawatt_database::dbutil::normalize_position;
 ///
 /// assert_eq!(normalize_position(0, 10), Ok(0));
 /// assert_eq!(normalize_position(-1, 10), Ok(9));
@@ -40,27 +40,27 @@ pub fn normalize_position(position: i64, _len: usize) -> Result<usize, bool> {
 ///
 /// # Examples
 /// ```
-/// use database::dbutil::usize_to_vec;
+/// use jigawatt_database::dbutil::int_to_bytes;
 ///
-/// assert_eq!(usize_to_vec(200), vec!['2' as u8, '0' as u8, '0' as u8]);
+/// assert_eq!(int_to_bytes(200), vec!['2' as u8, '0' as u8, '0' as u8]);
 /// ```
-pub fn usize_to_vec(i: usize) -> Vec<u8> {
-    format!("{}", i).into_bytes()
+pub fn int_to_bytes(i: usize) -> Vec<u8> {
+    i.to_string().into_bytes()
 }
 
 /// Parses an ASCII representation of a number
 ///
 /// # Examples
 /// ```
-/// use database::dbutil::vec_to_usize;
+/// use jigawatt_database::dbutil::bytes_to_int;
 ///
-/// assert_eq!(vec_to_usize(&vec!['2' as u8, '0' as u8, '0' as u8]).unwrap(), 200);
-/// assert!(vec_to_usize(&vec!['a' as u8]).is_err());
-/// assert!(vec_to_usize(&b"01".to_vec()).is_err());
-/// assert!(vec_to_usize(&b"0".to_vec()).is_ok());
-/// assert!(vec_to_usize(&b"".to_vec()).is_err());
+/// assert_eq!(bytes_to_int(&vec!['2' as u8, '0' as u8, '0' as u8]).unwrap(), 200);
+/// assert!(bytes_to_int(&vec!['a' as u8]).is_err());
+/// assert!(bytes_to_int(&b"01".to_vec()).is_err());
+/// assert!(bytes_to_int(&b"0".to_vec()).is_ok());
+/// assert!(bytes_to_int(&b"".to_vec()).is_err());
 /// ```
-pub fn vec_to_usize(data: &[u8]) -> Result<usize, OperationError> {
+pub fn bytes_to_int(data: &[u8]) -> Result<usize, OperationError> {
     // "01" should not be transformed into 1
     if data.is_empty() || (data.len() > 1 && data[0] as char == '0') {
         return Err(OperationError::ValueError(

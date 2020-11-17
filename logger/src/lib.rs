@@ -14,9 +14,7 @@ use std::thread;
 /// # Examples
 ///
 /// ```
-/// # #[macro_use(log)]
-/// # extern crate logger;
-/// # use logger::{Logger, Level};
+/// # use jigawatt_logger::{Logger, Level, log};
 /// #
 /// # fn main() {
 /// # let logger = Logger::new(Level::Warning);
@@ -44,18 +42,14 @@ macro_rules! log_and_exit {
 /// # Examples
 ///
 /// ```
-/// # #[macro_use(sendlog)]
-/// # extern crate logger;
-/// # use logger::{Logger, Level};
+/// # use jigawatt_logger::{Logger, Level, sendlog};
 /// # use std::sync::mpsc::channel;
 /// #
-/// # fn main() {
-/// # let (tx, rx) = channel();
-/// # let logger = Logger::channel(Level::Debug, tx);
-/// # let sender = logger.sender();
+/// let (tx, rx) = channel();
+/// let logger = Logger::channel(Level::Debug, tx);
+/// let sender = logger.sender();
 /// sendlog!(sender, Debug, "hello {}", "world");
-/// # assert_eq!(rx.recv().unwrap(), b"hello world\n");
-/// # }
+/// assert_eq!(rx.recv().unwrap(), b"hello world\n");
 /// ```
 #[macro_export]
 macro_rules! sendlog {
@@ -145,7 +139,7 @@ impl Level {
     /// # Examples
     ///
     /// ```
-    /// # use logger::Level;
+    /// # use jigawatt_logger::Level;
     /// #
     /// assert!(Level::Debug.contains(&Level::Debug));
     /// assert!(!Level::Warning.contains(&Level::Debug));
@@ -260,7 +254,7 @@ impl Logger {
     ///
     /// # Examples
     /// ```
-    /// # use logger::{Logger, Level};
+    /// # use jigawatt_logger::{Logger, Level};
     /// #
     /// let logger = Logger::new(Level::Warning);
     /// logger.log(Level::Warning, "hello world".to_owned(), None);
@@ -273,7 +267,7 @@ impl Logger {
     ///
     /// # Examples
     /// ```
-    /// # use logger::{Logger, Level};
+    /// # use jigawatt_logger::{Logger, Level};
     /// #
     /// let logger = Logger::new_err(Level::Warning);
     /// logger.log(Level::Warning, "hello world".to_owned(), None);
@@ -286,7 +280,7 @@ impl Logger {
     ///
     /// # Examples
     /// ```
-    /// # use logger::{Logger, Level};
+    /// # use jigawatt_logger::{Logger, Level};
     /// # use std::sync::mpsc::channel;
     /// #
     /// let (tx, rx) = channel();

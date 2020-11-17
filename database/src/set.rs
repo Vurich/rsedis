@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::io;
 use std::io::Write;
 
-use crate::dbutil::{usize_to_vec, vec_to_usize};
+use crate::dbutil::{bytes_to_int, int_to_bytes};
 
 use rand::distributions::{IndependentSample, Range, Sample};
 use rand::thread_rng;
@@ -34,7 +34,7 @@ impl ValueSet {
     pub fn create_with_hashset(h: HashSet<Vec<u8>>) -> ValueSet {
         let mut s = HashSet::new();
         for v in h.iter() {
-            match vec_to_usize(&v) {
+            match bytes_to_int(&v) {
                 Ok(n) => {
                     s.insert(n);
                 }
@@ -60,7 +60,7 @@ impl ValueSet {
         match self {
             ValueSet::Integer(set) => {
                 for i in set.iter() {
-                    h.insert(usize_to_vec(*i));
+                    h.insert(int_to_bytes(*i));
                 }
             }
             ValueSet::Data(_) => return,
@@ -72,7 +72,7 @@ impl ValueSet {
         match self {
             ValueSet::Integer(set) => {
                 if set.len() < max_int_size {
-                    if let Ok(v) = vec_to_usize(&el) {
+                    if let Ok(v) = bytes_to_int(&el) {
                         return set.insert(v);
                     }
                 }
@@ -89,7 +89,7 @@ impl ValueSet {
         match self {
             ValueSet::Data(set) => set.remove(el),
             ValueSet::Integer(set) => {
-                match vec_to_usize(&el) {
+                match bytes_to_int(&el) {
                     Ok(v) => set.remove(&v),
                     Err(_) => false, // only have usize, removing not a usize
                 }
@@ -101,7 +101,7 @@ impl ValueSet {
         match self {
             ValueSet::Data(set) => set.contains(el),
             ValueSet::Integer(set) => {
-                match vec_to_usize(&el) {
+                match bytes_to_int(&el) {
                     Ok(v) => set.contains(&v),
                     Err(_) => false, // only have usize, removing not a usize
                 }
@@ -119,7 +119,7 @@ impl ValueSet {
     pub fn smembers(&self) -> Vec<Vec<u8>> {
         match self {
             ValueSet::Data(set) => set.iter().cloned().collect::<Vec<_>>(),
-            ValueSet::Integer(set) => set.iter().copied().map(usize_to_vec).collect::<Vec<_>>(),
+            ValueSet::Integer(set) => set.iter().copied().map(int_to_bytes).collect::<Vec<_>>(),
         }
     }
 
@@ -169,7 +169,7 @@ impl ValueSet {
         // TODO: implemented in O(n), should be O(1)
         let mut r = Vec::new();
         for pos in self.get_random_positions(set.len(), count, allow_duplicates) {
-            r.push(usize_to_vec(*set.iter().skip(pos).take(1).next().unwrap()));
+            r.push(int_to_bytes(*set.iter().skip(pos).take(1).next().unwrap()));
         }
         r
     }
@@ -188,7 +188,7 @@ impl ValueSet {
         if count >= len {
             return match self {
                 ValueSet::Data(set) => set.drain().collect::<Vec<_>>(),
-                ValueSet::Integer(set) => set.drain().map(usize_to_vec).collect::<Vec<_>>(),
+                ValueSet::Integer(set) => set.drain().map(int_to_bytes).collect::<Vec<_>>(),
             };
         }
 
@@ -208,7 +208,7 @@ impl ValueSet {
                 for pos in positions {
                     let el = *set.iter().skip(pos).take(1).next().unwrap();
                     set.remove(&el);
-                    r.push(usize_to_vec(el));
+                    r.push(int_to_bytes(el));
                 }
                 r
             }
@@ -223,7 +223,7 @@ impl ValueSet {
                     match newvalue {
                         ValueSet::Integer(set) => {
                             for el in set {
-                                elements.remove(&usize_to_vec(*el));
+                                elements.remove(&int_to_bytes(*el));
                             }
                         }
                         ValueSet::Data(set) => {
@@ -246,7 +246,7 @@ impl ValueSet {
                         }
                         ValueSet::Data(set) => {
                             for el in set {
-                                match vec_to_usize(el) {
+                                match bytes_to_int(el) {
                                     Ok(i) => elements.remove(&i),
                                     Err(_) => false,
                                 };
@@ -254,7 +254,7 @@ impl ValueSet {
                         }
                     }
                 }
-                elements.into_iter().map(usize_to_vec).collect()
+                elements.into_iter().map(int_to_bytes).collect()
             }
         }
     }
@@ -270,7 +270,7 @@ impl ValueSet {
                                 .intersection(
                                     &set.iter()
                                         .copied()
-                                        .map(usize_to_vec)
+                                        .map(int_to_bytes)
                                         .collect::<HashSet<_>>(),
                                 )
                                 .cloned()
@@ -301,7 +301,7 @@ impl ValueSet {
                             result = result
                                 .intersection(
                                     &set.iter()
-                                        .filter_map(|x| vec_to_usize(x).ok())
+                                        .filter_map(|x| bytes_to_int(x).ok())
                                         .collect::<HashSet<_>>(),
                                 )
                                 .cloned()
@@ -312,7 +312,7 @@ impl ValueSet {
                         break;
                     }
                 }
-                result.into_iter().map(usize_to_vec).collect()
+                result.into_iter().map(int_to_bytes).collect()
             }
         }
     }
@@ -323,7 +323,7 @@ impl ValueSet {
             ValueSet::Integer(set) => set
                 .iter()
                 .copied()
-                .map(usize_to_vec)
+                .map(int_to_bytes)
                 .collect::<HashSet<_>>(),
         };
         for newvalue in sets {
@@ -333,7 +333,7 @@ impl ValueSet {
                         .union(
                             &set.iter()
                                 .copied()
-                                .map(usize_to_vec)
+                                .map(int_to_bytes)
                                 .collect::<HashSet<_>>(),
                         )
                         .cloned()

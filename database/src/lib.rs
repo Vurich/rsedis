@@ -8,10 +8,11 @@ pub mod string;
 pub mod zset;
 
 use std::{
+    cmp,
     collections::Bound,
     collections::HashMap,
     collections::HashSet,
-    env,
+    env, fmt,
     io::Write,
     iter::FromIterator,
     ops::{Deref, DerefMut, RangeFull},
@@ -154,8 +155,8 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
-    /// use database::string::ValueString;
+    /// use jigawatt_database::Value;
+    /// use jigawatt_database::string::ValueString;
     ///
     /// assert!(Value::Nil.is_nil());
     /// assert!(!Value::String(ValueString::Integer(1)).is_nil());
@@ -171,8 +172,8 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
-    /// use database::string::ValueString;
+    /// use jigawatt_database::Value;
+    /// use jigawatt_database::string::ValueString;
     ///
     /// assert!(!Value::Nil.is_string());
     /// assert!(Value::String(ValueString::Integer(1)).is_string());
@@ -188,8 +189,8 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
-    /// use database::list::ValueList;
+    /// use jigawatt_database::Value;
+    /// use jigawatt_database::list::ValueList;
     ///
     /// assert!(!Value::Nil.is_list());
     /// assert!(Value::List(ValueList::new()).is_list());
@@ -205,8 +206,8 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
-    /// use database::set::ValueSet;
+    /// use jigawatt_database::Value;
+    /// use jigawatt_database::set::ValueSet;
     ///
     /// assert!(!Value::Nil.is_set());
     /// assert!(Value::Set(ValueSet::new()).is_set());
@@ -222,7 +223,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// val.set(vec![1, 245, 3]);
@@ -238,7 +239,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.get().unwrap(), vec![]);
@@ -247,8 +248,8 @@ impl Value {
     /// ```
     ///
     /// ```
-    /// use database::Value;
-    /// use database::list::ValueList;
+    /// use jigawatt_database::Value;
+    /// use jigawatt_database::list::ValueList;
     ///
     /// assert!(Value::List(ValueList::new()).get().is_err());
     /// ```
@@ -264,7 +265,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.strlen().unwrap(), 0);
@@ -285,7 +286,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.append(vec![1, 2, 3]).unwrap(), 3);
@@ -311,7 +312,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.incr(3).unwrap(), 3);
@@ -334,7 +335,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.incrbyfloat(3.3).unwrap(), 3.3);
@@ -359,7 +360,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.getrange(0, -1).unwrap(), b"".to_vec());
@@ -382,7 +383,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.setrange(1, vec![1, 2]).unwrap(), 3);
@@ -409,7 +410,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.setbit(0, true).unwrap(), false);
@@ -434,7 +435,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.getbit(0).unwrap(), false);
@@ -455,7 +456,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.pfadd(vec![vec![1], vec![2], vec![3]]).unwrap(), true);
@@ -478,7 +479,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.pfadd(vec![vec![1], vec![2], vec![3]]).unwrap(), true);
@@ -496,7 +497,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val1 = Value::Nil;
     /// assert_eq!(val1.pfadd(vec![vec![1], vec![2], vec![3]]).unwrap(), true);
@@ -504,7 +505,7 @@ impl Value {
     /// let mut val3 = Value::Nil;
     /// assert_eq!(val3.pfadd(vec![vec![1], vec![2], vec![4]]).unwrap(), true);
     /// let mut val = Value::Nil;
-    /// assert!(val.pfmerge(vec![&val1, &val2, &val3]).is_ok());
+    /// assert!(val.pfmerge(vec![val1, val2, val3]).is_ok());
     /// assert_eq!(val.pfcount().unwrap(), 4);
     /// ```
     pub fn pfmerge(&mut self, values: Vec<Value>) -> Result<(), OperationError> {
@@ -538,7 +539,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.push(vec![1], true).unwrap(), 1);
@@ -566,7 +567,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// val.push(vec![1], true).unwrap();
@@ -589,7 +590,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// val.push(vec![1], true).unwrap();
@@ -610,7 +611,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// val.push(vec![1], true).unwrap();
@@ -636,7 +637,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.llen().unwrap(), 0);
@@ -657,7 +658,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// val.push(vec![1], true).unwrap();
@@ -680,7 +681,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.lrem(false, 2, vec![3]).unwrap(), 0);
@@ -714,7 +715,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// val.push(vec![1], true).unwrap();
@@ -735,7 +736,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// val.push(vec![1], true).unwrap();
@@ -759,7 +760,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.sadd(vec![1], 3).unwrap(), true);
@@ -789,7 +790,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.srem(&[0]).unwrap(), false);
@@ -812,7 +813,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.sismember(&[0]).unwrap(), false);
@@ -834,7 +835,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.scard().unwrap(), 0);
@@ -856,7 +857,7 @@ impl Value {
     /// # Examples
     /// ```
     /// use std::collections::HashSet;
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// val.sadd(vec![1], 3).unwrap();
@@ -880,7 +881,7 @@ impl Value {
     /// # Examples
     /// ```
     /// use std::collections::HashSet;
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// val.sadd(vec![1], 3).unwrap();
@@ -894,7 +895,7 @@ impl Value {
     /// ```
     ///
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// val.sadd(vec![1], 3).unwrap();
@@ -921,7 +922,7 @@ impl Value {
     /// # Examples
     /// ```
     /// use std::collections::HashSet;
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// val.sadd(vec![1], 3).unwrap();
@@ -948,7 +949,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     /// use std::collections::HashSet;
     ///
     /// let mut val1 = Value::Nil;
@@ -960,7 +961,7 @@ impl Value {
     /// let mut val3 = Value::Nil;
     /// val3.sadd(vec![2], 3).unwrap();
     /// let set = vec![vec![3]].into_iter().collect::<HashSet<_>>();
-    /// assert_eq!(val1.sdiff(&[&val2, &val3]).unwrap(), set);
+    /// assert_eq!(val1.sdiff(&[val2, val3]).unwrap(), set);
     /// ```
     pub fn sdiff(&self, set_values: &[Value]) -> Result<HashSet<Vec<u8>>, OperationError> {
         match self {
@@ -978,7 +979,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     /// use std::collections::HashSet;
     ///
     /// let mut val1 = Value::Nil;
@@ -992,7 +993,7 @@ impl Value {
     /// val3.sadd(vec![1], 3).unwrap();
     /// val3.sadd(vec![3], 3).unwrap();
     /// let set = vec![vec![1]].into_iter().collect::<HashSet<_>>();
-    /// assert_eq!(val1.sinter(&[&val2, &val3]).unwrap(), set);
+    /// assert_eq!(val1.sinter(&[val2, val3]).unwrap(), set);
     /// ```
     pub fn sinter(&self, set_values: &[Value]) -> Result<HashSet<Vec<u8>>, OperationError> {
         match self {
@@ -1010,7 +1011,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     /// use std::collections::HashSet;
     ///
     /// let mut val1 = Value::Nil;
@@ -1022,7 +1023,7 @@ impl Value {
     /// val3.sadd(vec![1], 3).unwrap();
     /// val3.sadd(vec![3], 3).unwrap();
     /// let set = vec![vec![1], vec![2], vec![3]].into_iter().collect::<HashSet<_>>();
-    /// assert_eq!(val1.sunion(&[&val2, &val3]).unwrap(), set);
+    /// assert_eq!(val1.sunion(&[val2, val3]).unwrap(), set);
     /// ```
     pub fn sunion(&self, set_values: &[Value]) -> Result<HashSet<Vec<u8>>, OperationError> {
         let emptyset = ValueSet::new();
@@ -1040,7 +1041,7 @@ impl Value {
     /// # Examples
     /// ```
     /// use std::collections::HashSet;
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val1 = Value::Nil;
     /// val1.create_set(vec![vec![1], vec![2], vec![3]].into_iter().collect::<HashSet<_>>());
@@ -1054,7 +1055,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.zrem(vec![1]).unwrap(), false);
@@ -1083,7 +1084,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.zadd(1.0, vec![1], false, false, false, false).unwrap(), true);
@@ -1091,7 +1092,7 @@ impl Value {
     /// ```
     ///
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.zadd(1.0, vec![1], true, false, false, false).unwrap(), true);
@@ -1101,7 +1102,7 @@ impl Value {
     /// ```
     ///
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.zadd(1.0, vec![1], false, true, false, false).unwrap(), false);
@@ -1112,7 +1113,7 @@ impl Value {
     /// ```
     ///
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.zadd(1.0, vec![1], false, false, true, false).unwrap(), true);
@@ -1121,7 +1122,7 @@ impl Value {
     /// ```
     ///
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.zadd(1.0, vec![1], false, false, false, true).unwrap(), true);
@@ -1156,7 +1157,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.zcard().unwrap(), 0);
@@ -1177,7 +1178,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.zscore(vec![1]).unwrap(), None);
@@ -1197,7 +1198,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// assert_eq!(val.zincrby(1.0, vec![1]).unwrap(), 1.0);
@@ -1218,7 +1219,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     /// use std::collections::Bound;
     ///
     /// let mut val = Value::Nil;
@@ -1241,7 +1242,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     /// use std::collections::Bound;
     ///
     /// let mut val = Value::Nil;
@@ -1270,7 +1271,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// val.zadd(1.0, vec![1], false, false, false, false).unwrap();
@@ -1319,7 +1320,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     /// use std::collections::Bound;
     ///
     /// let mut val = Value::Nil;
@@ -1363,7 +1364,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     /// use std::collections::Bound;
     ///
     /// let mut val = Value::Nil;
@@ -1398,7 +1399,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// val.zadd(1.0, vec![1], false, false, false, false).unwrap();
@@ -1421,7 +1422,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     /// use std::collections::Bound;
     ///
     /// let mut val = Value::Nil;
@@ -1449,7 +1450,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     /// use std::collections::Bound;
     ///
     /// let mut val = Value::Nil;
@@ -1477,7 +1478,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     /// use std::collections::Bound;
     ///
     /// let mut val = Value::Nil;
@@ -1501,8 +1502,8 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
-    /// use database::zset;
+    /// use jigawatt_database::Value;
+    /// use jigawatt_database::zset;
     ///
     /// let mut val1 = Value::Nil;
     /// val1.zadd(1.1, vec![1], false, false, false, false).unwrap();
@@ -1513,7 +1514,7 @@ impl Value {
     /// val3.zadd(1.3, vec![1], false, false, false, false).unwrap();
     /// val3.zadd(3.3, vec![3], false, false, false, false).unwrap();
     /// let mut val4 = Value::Nil;
-    /// val4 = val4.zunion(&[&val1, &val2, &val3], None, zset::Aggregate::Sum).unwrap();
+    /// val4 = val4.zunion(&[val1, val2, val3], None, zset::Aggregate::Sum).unwrap();
     /// assert_eq!(val4.zcard().unwrap(), 3);
     /// assert!(((val4.zscore(vec![1]).unwrap().unwrap() - 3.6)).abs() < 0.01);
     /// assert!(((val4.zscore(vec![2]).unwrap().unwrap() - 2.2)).abs() < 0.01);
@@ -1522,8 +1523,8 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
-    /// use database::zset;
+    /// use jigawatt_database::Value;
+    /// use jigawatt_database::zset;
     ///
     /// let mut val1 = Value::Nil;
     /// val1.zadd(1.1, vec![1], false, false, false, false).unwrap();
@@ -1534,7 +1535,7 @@ impl Value {
     /// val3.zadd(1.3, vec![1], false, false, false, false).unwrap();
     /// val3.zadd(3.3, vec![3], false, false, false, false).unwrap();
     /// let mut val4 = Value::Nil;
-    /// val4 = val4.zunion(&[&val1, &val2, &val3], Some(vec![1.0, 2.0, 3.0]), zset::Aggregate::Min).unwrap();
+    /// val4 = val4.zunion(&[val1, val2, val3], Some(vec![1.0, 2.0, 3.0]), zset::Aggregate::Min).unwrap();
     /// assert_eq!(val4.zcard().unwrap(), 3);
     /// assert!(((val4.zscore(vec![1]).unwrap().unwrap() - 1.1)).abs() < 0.01);
     /// assert!(((val4.zscore(vec![2]).unwrap().unwrap() - 4.4)).abs() < 0.01);
@@ -1558,8 +1559,8 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
-    /// use database::zset;
+    /// use jigawatt_database::Value;
+    /// use jigawatt_database::zset;
     ///
     /// let mut val1 = Value::Nil;
     /// val1.zadd(1.1, vec![1], false, false, false, false).unwrap();
@@ -1570,15 +1571,15 @@ impl Value {
     /// val3.zadd(1.3, vec![1], false, false, false, false).unwrap();
     /// val3.zadd(3.3, vec![3], false, false, false, false).unwrap();
     /// let mut val4 = Value::Nil;
-    /// val4 = val4.zinter(&[&val1, &val2, &val3], None, zset::Aggregate::Sum).unwrap();
+    /// val4 = val4.zinter(&[val1, val2, val3], None, zset::Aggregate::Sum).unwrap();
     /// assert_eq!(val4.zcard().unwrap(), 1);
     /// assert!(((val4.zscore(vec![1]).unwrap().unwrap() - 3.6)).abs() < 0.01);
     /// ```
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
-    /// use database::zset;
+    /// use jigawatt_database::Value;
+    /// use jigawatt_database::zset;
     ///
     /// let mut val1 = Value::Nil;
     /// val1.zadd(1.1, vec![1], false, false, false, false).unwrap();
@@ -1589,7 +1590,7 @@ impl Value {
     /// val3.zadd(1.3, vec![1], false, false, false, false).unwrap();
     /// val3.zadd(3.3, vec![3], false, false, false, false).unwrap();
     /// let mut val4 = Value::Nil;
-    /// val4 = val4.zinter(&[&val1, &val2, &val3], Some(vec![1.0, 2.0, 3.0]), zset::Aggregate::Min).unwrap();
+    /// val4 = val4.zinter(&[val1, val2, val3], Some(vec![1.0, 2.0, 3.0]), zset::Aggregate::Min).unwrap();
     /// assert_eq!(val4.zcard().unwrap(), 1);
     /// assert!(((val4.zscore(vec![1]).unwrap().unwrap() - 1.1)).abs() < 0.01);
     /// ```
@@ -1612,7 +1613,7 @@ impl Value {
     ///
     /// # Examples
     /// ```
-    /// use database::Value;
+    /// use jigawatt_database::Value;
     ///
     /// let mut val = Value::Nil;
     /// val.set(vec![1, 2, 3]).unwrap();
@@ -1709,6 +1710,20 @@ pub struct ValueRef<'a> {
     key: Option<String>,
     value: Value,
 }
+
+impl fmt::Debug for ValueRef<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.value.fmt(f)
+    }
+}
+
+impl cmp::PartialEq for ValueRef<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.value.eq(&other.value)
+    }
+}
+
+impl cmp::Eq for ValueRef<'_> {}
 
 impl Deref for ValueRef<'_> {
     type Target = Value;
@@ -1812,7 +1827,7 @@ impl Database {
     /// # Examples
     ///
     /// ```
-    /// use database::{Database, Value};
+    /// use jigawatt_database::{Database, Value};
     ///
     /// let mut db = Database::mock();
     ///
@@ -1833,7 +1848,7 @@ impl Database {
     /// # Examples
     ///
     /// ```
-    /// use database::{Database, Value};
+    /// use jigawatt_database::{Database, Value};
     ///
     /// let mut db = Database::mock();
     ///
@@ -1843,7 +1858,7 @@ impl Database {
     /// let mut value = Value::Nil;
     /// value.set(vec![1]);
     ///
-    /// assert_eq!(db.get(0, &[1]), Some(&value));
+    /// assert_eq!(db.get(0, &[1]), Some(value));
     /// ```
     pub fn get(&mut self, index: usize, key: &[u8]) -> Option<Value> {
         if self.is_expired(index, key) {
@@ -1865,7 +1880,7 @@ impl Database {
     /// # Examples
     ///
     /// ```
-    /// use database::{Database, Value};
+    /// use jigawatt_database::{Database, Value};
     ///
     /// let mut db = Database::mock();
     ///
@@ -1894,7 +1909,7 @@ impl Database {
     /// # Examples
     ///
     /// ```
-    /// use database::{Database, Value};
+    /// use jigawatt_database::{Database, Value};
     ///
     /// let mut db = Database::mock();
     ///
@@ -1938,7 +1953,7 @@ impl Database {
     /// # Examples
     ///
     /// ```
-    /// use database::{Database, Value};
+    /// use jigawatt_database::{Database, Value};
     ///
     /// let mut db = Database::mock();
     ///
@@ -2045,8 +2060,8 @@ impl Database {
     ///
     /// # Examples
     /// ```
-    /// use database::Database;
-    /// # use database::PubsubEvent;
+    /// use jigawatt_database::Database;
+    /// # use jigawatt_database::PubsubEvent;
     /// # use std::sync::mpsc::{channel, TryRecvError};
     ///
     /// let mut db = Database::mock();
@@ -2075,7 +2090,7 @@ impl Database {
     ///
     /// # Examples
     /// ```
-    /// use database::Database;
+    /// use jigawatt_database::Database;
     /// # use std::sync::mpsc::{channel, TryRecvError};
     ///
     /// let mut db = Database::mock();
@@ -2108,8 +2123,8 @@ impl Database {
     ///
     /// # Examples
     /// ```
-    /// use database::Database;
-    /// # use database::PubsubEvent;
+    /// use jigawatt_database::Database;
+    /// # use jigawatt_database::PubsubEvent;
     /// # use std::sync::mpsc::{channel, TryRecvError};
     ///
     /// let mut db = Database::mock();
@@ -2188,7 +2203,7 @@ impl Database {
     /// # Examples
     ///
     /// ```
-    /// use database::{Database, Value};
+    /// use jigawatt_database::{Database, Value};
     ///
     /// let mut db = Database::mock();
     ///
@@ -2210,7 +2225,7 @@ impl Database {
     /// # Examples
     ///
     /// ```
-    /// use database::{Database, Value};
+    /// use jigawatt_database::{Database, Value};
     ///
     /// let mut db = Database::mock();
     /// db.config.rename_commands.insert("get".to_owned(), Some("getstring".to_owned()));

@@ -398,7 +398,12 @@ fn append(parser: &mut ParsedCommand, db: &mut Database, dbindex: usize) -> Resp
     r
 }
 
-fn generic_get(db: &mut Database, dbindex: usize, key: Vec<u8>, err_on_wrongtype: bool) -> Response {
+fn generic_get(
+    db: &mut Database,
+    dbindex: usize,
+    key: Vec<u8>,
+    err_on_wrongtype: bool,
+) -> Response {
     let obj = db.get(dbindex, &key);
     match obj {
         Some(value) => match value.get() {
@@ -2940,7 +2945,7 @@ mod test_command {
         }};
     }
 
-    fn getstr(database: &Database, key: &[u8]) -> String {
+    fn getstr(database: &mut Database, key: &[u8]) -> String {
         match database.get(0, &key.to_vec()).unwrap() {
             Value::String(value) => from_utf8(&*value.to_vec()).unwrap().to_owned(),
             _ => panic!("Got non-string"),
@@ -2965,7 +2970,7 @@ mod test_command {
             command(parser!(b"set key value"), &mut db, &mut Client::mock()).unwrap(),
             Response::Status("OK".to_owned())
         );
-        assert_eq!("value", getstr(&db, b"key"));
+        assert_eq!("value", getstr(&mut db, b"key"));
 
         assert_eq!(
             command(parser!(b"set key2 value xx"), &mut db, &mut Client::mock()).unwrap(),
@@ -2979,17 +2984,17 @@ mod test_command {
             command(parser!(b"set key2 value nx"), &mut db, &mut Client::mock()).unwrap(),
             Response::Status("OK".to_owned())
         );
-        assert_eq!("value", getstr(&db, b"key2"));
+        assert_eq!("value", getstr(&mut db, b"key2"));
         assert_eq!(
             command(parser!(b"set key2 valuf xx"), &mut db, &mut Client::mock()).unwrap(),
             Response::Status("OK".to_owned())
         );
-        assert_eq!("valuf", getstr(&db, b"key2"));
+        assert_eq!("valuf", getstr(&mut db, b"key2"));
         assert_eq!(
             command(parser!(b"set key2 value nx"), &mut db, &mut Client::mock()).unwrap(),
             Response::Nil
         );
-        assert_eq!("valuf", getstr(&db, b"key2"));
+        assert_eq!("valuf", getstr(&mut db, b"key2"));
 
         assert_eq!(
             command(
@@ -3027,12 +3032,12 @@ mod test_command {
             command(parser!(b"setnx key value"), &mut db, &mut Client::mock()).unwrap(),
             Response::Integer(1)
         );
-        assert_eq!("value", getstr(&db, b"key"));
+        assert_eq!("value", getstr(&mut db, b"key"));
         assert_eq!(
             command(parser!(b"setnx key valuf"), &mut db, &mut Client::mock()).unwrap(),
             Response::Integer(0)
         );
-        assert_eq!("value", getstr(&db, b"key"));
+        assert_eq!("value", getstr(&mut db, b"key"));
     }
 
     #[test]
@@ -3082,7 +3087,7 @@ mod test_command {
             command(parser!(b"get key"), &mut db, &mut Client::mock()).unwrap(),
             Response::Data("value".to_owned().into_bytes())
         );
-        assert_eq!("value", getstr(&db, b"key"));
+        assert_eq!("value", getstr(&mut db, b"key"));
     }
 
     #[test]
@@ -3125,7 +3130,7 @@ mod test_command {
             command(parser!(b"setrange key 1 i"), &mut db, &mut Client::mock()).unwrap(),
             Response::Integer(5)
         );
-        assert_eq!("vilue", getstr(&db, b"key"));
+        assert_eq!("vilue", getstr(&mut db, b"key"));
     }
 
     #[test]
@@ -3139,7 +3144,7 @@ mod test_command {
             command(parser!(b"setbit key 1 1"), &mut db, &mut Client::mock()).unwrap(),
             Response::Integer(0)
         );
-        assert_eq!("@", getstr(&db, b"key"));
+        assert_eq!("@", getstr(&mut db, b"key"));
         assert_eq!(
             command(parser!(b"setbit key 1 0"), &mut db, &mut Client::mock()).unwrap(),
             Response::Integer(1)
@@ -4340,7 +4345,7 @@ mod test_command {
             .collect::<HashSet<_>>();
         let mut set2 = Value::Nil;
         set2.create_set(set);
-        assert_eq!(db.get(0, &b"target".to_vec()).unwrap(), &set2);
+        assert_eq!(db.get(0, &b"target".to_vec()).unwrap(), set2);
     }
 
     #[test]
@@ -4436,7 +4441,7 @@ mod test_command {
             .collect::<HashSet<_>>();
         let mut set2 = Value::Nil;
         set2.create_set(set);
-        assert_eq!(db.get(0, &b"target".to_vec()).unwrap(), &set2);
+        assert_eq!(db.get(0, &b"target".to_vec()).unwrap(), set2);
     }
 
     #[test]
@@ -4505,7 +4510,7 @@ mod test_command {
             .collect::<HashSet<_>>();
         let mut set2 = Value::Nil;
         set2.create_set(set);
-        assert_eq!(db.get(0, &b"target".to_vec()).unwrap(), &set2);
+        assert_eq!(db.get(0, &b"target".to_vec()).unwrap(), set2);
     }
 
     #[test]

@@ -650,8 +650,8 @@ mod test_networking {
     use std::str::from_utf8;
     use std::thread;
 
-    use config::Config;
-    use logger::{Level, Logger};
+    use jigawatt_config::Config;
+    use jigawatt_logger::{Level, Logger};
 
     use super::Server;
     use std::time::Duration;

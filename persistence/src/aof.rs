@@ -64,7 +64,7 @@ mod test_aof {
     use std::io::Write;
 
     use super::Aof;
-    use parser::parse;
+    use jigawatt_parser::parse;
 
     #[test]
     fn test_write() {

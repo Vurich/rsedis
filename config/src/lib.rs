@@ -257,8 +257,8 @@ mod tests {
 
     use rand::random;
 
-    use logger::{Level, Logger};
-    use util::mstime;
+    use jigawatt_logger::{Level, Logger};
+    use jigawatt_util::mstime;
 
     macro_rules! config {
         ($str: expr, $logger: expr) => {{

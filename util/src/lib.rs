@@ -13,7 +13,7 @@ use time::get_time;
 /// # Examples
 ///
 /// ```
-/// use util::match_char;
+/// use jigawatt_util::match_char;
 /// assert!( match_char(&('a' as u8), &('a' as u8), false));
 /// assert!( match_char(&('a' as u8), &('a' as u8), true));
 /// assert!(!match_char(&('a' as u8), &('A' as u8), false));
@@ -34,7 +34,7 @@ pub fn match_char(e1: &u8, e2: &u8, ignore_case: bool) -> bool {
 /// # Examples
 ///
 /// ```
-/// use util::glob_match;
+/// use jigawatt_util::glob_match;
 /// assert!(glob_match(&b"".to_vec(), &b"".to_vec(), false));
 /// assert!(glob_match(&b"foo*baz".to_vec(), &b"foobarbaz".to_vec(), false));
 /// assert!(!glob_match(&b"foo*baz".to_vec(), &b"foobazbar".to_vec(), false));
@@ -176,14 +176,14 @@ pub fn mstime() -> i64 {
 ///
 /// # Examples
 /// ```
-/// # use util::splitargs;
+/// # use jigawatt_util::splitargs;
 /// #
 /// let res = splitargs(b"hello world").unwrap();
 /// assert_eq!(res, vec![b"hello".to_vec(), b"world".to_vec()]);
 /// ```
 ///
 /// ```
-/// # use util::splitargs;
+/// # use jigawatt_util::splitargs;
 /// #
 /// let res = splitargs(b"foo \"bar baz\"").unwrap();
 /// assert_eq!(res, vec![b"foo".to_vec(), b"bar baz".to_vec()]);
@@ -331,7 +331,7 @@ fn numtohex(num: u8) -> char {
 ///
 /// # Examples
 /// ```
-/// # use util::get_random_hex_chars;
+/// # use jigawatt_util::get_random_hex_chars;
 /// #
 /// let s = get_random_hex_chars(31);
 /// assert_eq!(s.len(), 31);
