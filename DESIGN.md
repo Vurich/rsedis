@@ -63,5 +63,58 @@ easily access our data - while still efficiently serialising the concept of hist
 space in the file to be reused as much as possible to prevent the size of the file from constantly
 expanding.
 
+## Data types
+
+Redis has a few more complex data types that are interesting to us: lists, sets, hashmaps and sorted
+sets. We don't really care about hyper-log-logs or bitmaps. My current idea is to have a similar
+process to our HAMT history map, i.e. to take methods used to implement functional data structures
+and to apply them to file formats, but we're limited by our goal that we ideally want to be able to
+round-trip through a stock zip file format parser and lose nothing but metadata and history.
+
+### Representation (in zip format)
+
+So, my idea is to have each of these types be represented as a folder. We can represent each
+individual element of these types as a file within that folder - sets and hashmaps are easy, where
+for a set the file name can be a hash of the file and for a hashmap he file name is just the key.
+Sets can actually have anything for the file name, as long as two of the names don't overlap,
+because even if the user edits the file name the zip file format requires the hash of the file to be
+included in its header. Sorted sets are a little bit more difficult, since we would ideally have the
+file names represent the order to make the re-sorting set required when importing an externally-
+generated zip file as short as possible, but this is really just an optimisation and we can
+ultimately choose arbitrary names just like sets because if we've lost the metadata after a round
+trip we would have to re-sort the data anyway in case it has been changed.
+
+Lists are more difficult, as you can add and remove elements at arbitrary locations, which changes
+the order. We have two options: update the file name in the local file header when we emit the
+central file directory - which is kinda hacky and means that the shared data between history steps
+gets mutated - or use a scheme that continues to represent the order without having to mutate
+anything. For the latter, the best scheme I can imagine is for the first element to be called `z`,
+then `zz`, then `zzz`, etc. This means that we can add an element between `z` and `zz` by calling it
+`zy`, add an element between `zy` and `zz` by calling it `zyz`, and so on. A value before `z` would
+be called `y`. Eventually, if we insert enough elements, we'll require a reshuffle of the names. We
+can change the `z` to be an earlier letter like `d`, which would allow us to add more elements after
+`d` before needing to make the name longer. This isn't a great scheme, and would probably lead to
+some pretty confused users, so I think that my favourite option is to simply edit the file names in
+the local file header to represent the position that the element is _currently_ in, instead of
+having the names be globally immutable. This isn't great, but since we can trivially store the
+"true" data structure in our own metadata and since we're not really using the zip file names at
+runtime - only when writing the project file and when reading an externally-produced zip file - I
+think it's a reasonable compromise. 
+
+### Representation (internal)
+
+Since we've committed to having our own internal metadata which has its own representation of data,
+where we care more about zip-compatibility than reusing zip features for our own ends, it's
+relatively easy for us to implement these types efficiently.
+
+Maps and sets can just be HAMTs - implemented identically to the history HAMT. Lists can be a
+bitmapped vector trie, which is basically just a HAMT where the "hash" is the index of the element
+instead of a hash of its key. Ordered sets, if we need them at all, can be a B-tree. These
+structures can all be made immutable with very little cloning. The root database HAMT can point to
+the root nodes of these trees, which means that changing a single element in these collections does
+not require cloning the whole thing, merely a subset thereof. The elements of the collections can be
+zip-compatible files - i.e. they can include the local file header. This means the central file
+directory can just point directly to an element of the collection.
+
 [hamt]: https://en.wikipedia.org/wiki/Hash_array_mapped_trie
 [rangealloc]: https://crates.io/crates/range-alloc
